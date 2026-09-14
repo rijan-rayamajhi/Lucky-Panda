@@ -163,27 +163,24 @@ public class CardsPanel : Popup
 
         var root = UIFactory.Panel(parent, "Card" + def.id);
 
-        // Contents live inside the frame's window; the border is drawn over the
-        // top afterwards so its gold overlaps the fill cleanly.
-        var window = UIFactory.Frame(root, "Fill", 8f, art != null ? 0f : 3f,
-            art != null ? Color.clear : (owned ? rarity : new Color(0.48f, 0.42f, 0.58f, 1f)),
-            owned ? new Color(0.17f, 0.11f, 0.26f, 1f) : new Color(0.13f, 0.09f, 0.19f, 1f),
-            owned ? new Color(0.08f, 0.04f, 0.15f, 1f) : new Color(0.07f, 0.05f, 0.11f, 1f));
-        var wr = window.rectTransform;
-        wr.anchorMin = art != null ? WindowMin : Vector2.zero;
-        wr.anchorMax = art != null ? WindowMax : Vector2.one;
-        wr.offsetMin = Vector2.zero;
-        wr.offsetMax = Vector2.zero;
+        // Contents live inside the frame's window directly on the card canvas,
+        // without any murky dark background box.
+        var window = UIFactory.Panel(root, "Window");
+        window.anchorMin = art != null ? WindowMin : Vector2.zero;
+        window.anchorMax = art != null ? WindowMax : Vector2.one;
+        window.offsetMin = Vector2.zero;
+        window.offsetMax = Vector2.zero;
 
-        var symbol = UIFactory.Img(window.transform, "Symbol", ContentRefs.Symbol(def.symbolIndex));
-        symbol.color = owned ? rarity : new Color(0.45f, 0.38f, 0.55f, 0.9f);
+        var symbol = UIFactory.Img(window, "Symbol", ContentRefs.Symbol(def.symbolIndex));
+        symbol.preserveAspect = true;
+        symbol.color = owned ? Color.white : new Color(1f, 1f, 1f, 0.45f);
         var sr = symbol.rectTransform;
-        sr.anchorMin = new Vector2(0.14f, 0.34f);
-        sr.anchorMax = new Vector2(0.86f, 0.96f);
+        sr.anchorMin = new Vector2(0.12f, 0.32f);
+        sr.anchorMax = new Vector2(0.88f, 0.96f);
         sr.offsetMin = Vector2.zero;
         sr.offsetMax = Vector2.zero;
 
-        var stars = UIFactory.Panel(window.transform, "Stars");
+        var stars = UIFactory.Panel(window, "Stars");
         stars.anchorMin = new Vector2(0.04f, 0.04f);
         stars.anchorMax = new Vector2(0.96f, 0.28f);
         stars.offsetMin = Vector2.zero;
@@ -193,7 +190,7 @@ public class CardsPanel : Popup
         for (int i = 0; i < def.rarity; i++)
         {
             var star = UIFactory.Shape(stars, "S" + i, UIShape.Star,
-                owned ? UIFactory.GoldBright : new Color(0.38f, 0.32f, 0.48f, 1f));
+                owned ? UIFactory.GoldBright : new Color(1f, 0.85f, 0.4f, 0.45f));
             var sle = star.gameObject.AddComponent<LayoutElement>();
             sle.preferredWidth = 16f;
             sle.preferredHeight = 16f;
@@ -203,7 +200,7 @@ public class CardsPanel : Popup
         {
             var border = UIFactory.Img(root, "Frame", art);
             border.preserveAspect = false;
-            border.color = owned ? Color.white : new Color(0.70f, 0.65f, 0.78f, 1f);
+            border.color = owned ? Color.white : new Color(1f, 1f, 1f, 0.75f);
             UIFactory.Stretch(border.rectTransform);
         }
 

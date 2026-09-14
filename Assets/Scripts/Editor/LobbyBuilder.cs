@@ -112,7 +112,10 @@ public static class LobbyBuilder
 #endif
 
         new GameObject("GameState", typeof(GameState));
-        new GameObject("AudioManager", typeof(AudioManager));
+        var audioGo = new GameObject("AudioManager", typeof(AudioManager));
+        var am = audioGo.GetComponent<AudioManager>();
+        am.musicClip = AssetDatabase.LoadAssetAtPath<AudioClip>("Assets/Audio/Lobby_Music.mp3");
+        am.clickSound = AssetDatabase.LoadAssetAtPath<AudioClip>("Assets/Audio/mixkit-select-click-1109.wav");
 
         // Background
         var bg = Img(canvasGO.transform, "Background", ArtBG + "BG_Lobby.png");
@@ -146,7 +149,10 @@ public static class LobbyBuilder
         Place(buy.GetComponent<RectTransform>(), new Vector2(0.5f, 0.5f), new Vector2(0, 0), new Vector2(220, 100));
 
         var piggy = Img(hud, "PiggyIcon", ArtUI + "Icon_Piggy.png");
-        Place(piggy.rectTransform, new Vector2(1, 0.5f), new Vector2(-90, 0), new Vector2(90, 90));
+        Place(piggy.rectTransform, new Vector2(1, 0.5f), new Vector2(-168, 0), new Vector2(88, 88));
+
+        var settingsBtn = Btn(hud, "SettingsButton", ArtUI + "Icon_Settings.png");
+        Place(settingsBtn.GetComponent<RectTransform>(), new Vector2(1, 0.5f), new Vector2(-60, 0), new Vector2(86, 86));
 
         // Bottom nav
         var nav = Panel(safe, "BottomNav");
@@ -249,6 +255,10 @@ public static class LobbyBuilder
 
         // Shop page opened by the BUY button.
         var shop = BuildShopPanel(canvasGO.transform);
+
+        // Settings page opened by the Settings button.
+        var settingsPanel = BuildSettingsPanel(canvasGO.transform);
+        OnClick(settingsBtn, settingsPanel.Open);
 
         // Shared reward celebration, and the asset handles runtime code needs.
         BuildRewardPopup(canvasGO.transform);
@@ -590,6 +600,48 @@ public static class LobbyBuilder
         return popup;
     }
 
+    static SettingsPanel BuildSettingsPanel(Transform parent)
+    {
+        var (content, panel) = BuildPanelShell<SettingsPanel>(parent, "SettingsPanel", "SETTINGS", new Vector2(880, 640));
+
+        float startY = -24f;
+        float rowStep = 96f;
+
+        panel.musicToggle = BuildSettingRow(content, "MusicRow", "BACKGROUND MUSIC", startY, out panel.musicStatusText);
+        panel.sfxToggle = BuildSettingRow(content, "SfxRow", "SOUND EFFECTS", startY - rowStep, out panel.sfxStatusText);
+        panel.hapticsToggle = BuildSettingRow(content, "HapticsRow", "VIBRATION & HAPTICS", startY - rowStep * 2, out panel.hapticsStatusText);
+
+        Divider(content, "SettingsRule", startY - rowStep * 2.8f, 0.25f);
+
+        var version = Label(content, "VersionText", "LUCKY PANDA CASINO  •  v1.0.0");
+        Place(version.rectTransform, new Vector2(0.5f, 0f), new Vector2(0, 36), new Vector2(600, 36));
+        version.alignment = TextAlignmentOptions.Center;
+        version.fontSize = 20;
+        version.color = UIFactory.Dim;
+
+        return panel;
+    }
+
+    static Button BuildSettingRow(RectTransform parent, string name, string labelText, float yPos, out TMP_Text statusLabel)
+    {
+        var row = Panel(parent, name);
+        Place(row, new Vector2(0f, 1f), new Vector2(40, yPos), new Vector2(680, 72));
+        row.pivot = new Vector2(0, 1);
+
+        var title = Label(row, "Label", labelText);
+        Place(title.rectTransform, new Vector2(0, 0.5f), new Vector2(0, 0), new Vector2(460, 50));
+        title.alignment = TextAlignmentOptions.MidlineLeft;
+        title.fontSize = 28;
+        title.color = UIFactory.Cream;
+        UIFactory.Shadowed(title, 0.7f, 2f);
+
+        var toggleBtn = PillButton(row, "ToggleBtn", "ON", new Vector2(160, 56));
+        Place(toggleBtn.GetComponent<RectTransform>(), new Vector2(1f, 0.5f), new Vector2(-10, 0), new Vector2(160, 56));
+        statusLabel = toggleBtn.GetComponentInChildren<TMP_Text>();
+
+        return toggleBtn;
+    }
+
     // Real Shop page: a grid of coin/gem packs. Mock purchases (see ShopPack).
     static Popup BuildShopPanel(Transform parent)
     {
@@ -832,13 +884,9 @@ public static class LobbyBuilder
     {
         float x = side < 0 ? 0f : 500f;
 
-        // Each column gets its own plate, so "what I have" and "what's next"
-        // read as two things rather than one block of text in two halves.
-        var plate = Frame(content, name + "Plate", 18f, 0f, Color.clear,
-            side < 0 ? new Color(0.20f, 0.12f, 0.30f, 0.95f) : new Color(0.11f, 0.06f, 0.20f, 0.92f),
-            side < 0 ? new Color(0.09f, 0.05f, 0.17f, 0.95f) : new Color(0.05f, 0.02f, 0.10f, 0.94f));
-        Place(plate.rectTransform, new Vector2(0, 1), new Vector2(x, y + 8), new Vector2(484, 248));
-        plate.rectTransform.pivot = new Vector2(0, 1);
+        var plate = Panel(content, name + "Plate");
+        Place(plate, new Vector2(0, 1), new Vector2(x, y + 8), new Vector2(484, 248));
+        plate.pivot = new Vector2(0, 1);
 
         var header = Label(plate.transform, "Header", heading);
         Place(header.rectTransform, new Vector2(0, 1), new Vector2(24, -14), new Vector2(440, 38));
@@ -876,16 +924,9 @@ public static class LobbyBuilder
         progress.color = new Color(1f, 0.91f, 0.62f);
         panel.progressText = progress;
 
-        // Recessed well behind the tiles, so an empty board still looks like a
-        // frame waiting to be filled rather than a hole in the panel.
-        const float board = 470f;
-        // Borderless: every tile already draws its own rim, so a frame here
-        // would just be a second outline around the same square.
-        var well = Frame(content, "Well", 16f, 0f, Color.clear,
-            new Color(0.05f, 0.02f, 0.10f, 1f), new Color(0.02f, 0.01f, 0.05f, 1f));
-        Place(well.rectTransform, new Vector2(0.5f, 1f), new Vector2(0, -102), new Vector2(board + 16f, board + 16f));
-        well.rectTransform.pivot = new Vector2(0.5f, 1f);
 
+
+        const float board = 470f;
         var boardRect = Panel(content, "Board");
         Place(boardRect, new Vector2(0.5f, 1f), new Vector2(0, -110), new Vector2(board, board));
         boardRect.pivot = new Vector2(0.5f, 1f);
@@ -934,11 +975,10 @@ public static class LobbyBuilder
         grid.childAlignment = TextAnchor.UpperLeft;
         panel.grid = album;
 
-        // Right-hand set summary, on its own recessed plate
-        var side = Frame(content, "SetPlate", 20f, 0f, Color.clear,
-            new Color(0.15f, 0.08f, 0.26f, 0.92f), new Color(0.07f, 0.03f, 0.13f, 0.94f));
-        Place(side.rectTransform, new Vector2(0, 1), new Vector2(456, -68), new Vector2(708, 544));
-        side.rectTransform.pivot = new Vector2(0, 1);
+        // Right-hand set summary sits directly on the clean purple card canvas
+        var side = Panel(content, "SetPlate");
+        Place(side, new Vector2(0, 1), new Vector2(456, -68), new Vector2(708, 544));
+        side.pivot = new Vector2(0, 1);
 
         var setName = Label(side.transform, "SetName", "BAMBOO GROVE");
         Place(setName.rectTransform, new Vector2(0, 1), new Vector2(24, -14), new Vector2(650, 48));

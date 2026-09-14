@@ -12,24 +12,32 @@ public class AudioManager : MonoBehaviour
 
     [Header("Audio Clips")]
     public AudioClip clickSound;
+    public AudioClip musicClip;
 
     AudioSource sfxSource;
+    AudioSource musicSource;
 
-    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
-    static void AutoInit()
-    {
-        if (I == null)
-        {
-            var go = new GameObject("AudioManager");
-            DontDestroyOnLoad(go);
-            I = go.AddComponent<AudioManager>();
-        }
-    }
+    const string KeyMusic = "LuckyPanda_MusicEnabled";
+    const string KeySfx = "LuckyPanda_SfxEnabled";
+    const string KeyHaptics = "LuckyPanda_HapticsEnabled";
+
+    public bool musicEnabled { get; private set; } = true;
+    public bool sfxEnabled { get; private set; } = true;
+    public bool hapticsEnabled { get; private set; } = true;
 
     void Awake()
     {
         if (I != null && I != this)
         {
+            if (musicClip != null)
+            {
+                I.musicClip = musicClip;
+                I.PlayLobbyMusic();
+            }
+            if (clickSound != null)
+            {
+                I.clickSound = clickSound;
+            }
             Destroy(gameObject);
             return;
         }
@@ -46,13 +54,85 @@ public class AudioManager : MonoBehaviour
             sfxSource.spatialBlend = 0f; // 2D sound
         }
 
+        musicSource = gameObject.AddComponent<AudioSource>();
+        musicSource.playOnAwake = false;
+        musicSource.loop = true;
+        musicSource.spatialBlend = 0f;
+        musicSource.volume = 0.65f;
+
         if (clickSound == null)
             clickSound = Resources.Load<AudioClip>("click");
+
+        LoadPreferences();
+    }
+
+    void LoadPreferences()
+    {
+        musicEnabled = PlayerPrefs.GetInt(KeyMusic, 1) == 1;
+        sfxEnabled = PlayerPrefs.GetInt(KeySfx, 1) == 1;
+        hapticsEnabled = PlayerPrefs.GetInt(KeyHaptics, 1) == 1;
+
+        if (musicSource != null) musicSource.mute = !musicEnabled;
+        if (sfxSource != null) sfxSource.mute = !sfxEnabled;
+    }
+
+    public void SetMusicEnabled(bool enabled)
+    {
+        musicEnabled = enabled;
+        PlayerPrefs.SetInt(KeyMusic, enabled ? 1 : 0);
+        PlayerPrefs.Save();
+        if (musicSource != null)
+        {
+            musicSource.mute = !enabled;
+            if (enabled && !musicSource.isPlaying && musicClip != null)
+                musicSource.Play();
+        }
+    }
+
+    public void SetSfxEnabled(bool enabled)
+    {
+        sfxEnabled = enabled;
+        PlayerPrefs.SetInt(KeySfx, enabled ? 1 : 0);
+        PlayerPrefs.Save();
+        if (sfxSource != null)
+            sfxSource.mute = !enabled;
+    }
+
+    public void SetHapticsEnabled(bool enabled)
+    {
+        hapticsEnabled = enabled;
+        PlayerPrefs.SetInt(KeyHaptics, enabled ? 1 : 0);
+        PlayerPrefs.Save();
     }
 
     void Start()
     {
         HookScene();
+        PlayLobbyMusic();
+    }
+
+    public void PlayLobbyMusic()
+    {
+        if (musicSource == null)
+        {
+            musicSource = gameObject.AddComponent<AudioSource>();
+            musicSource.playOnAwake = false;
+            musicSource.loop = true;
+            musicSource.spatialBlend = 0f;
+        }
+
+        if (musicClip != null)
+        {
+            musicSource.clip = musicClip;
+            musicSource.volume = 0.65f;
+            musicSource.loop = true;
+            if (!musicSource.isPlaying)
+                musicSource.Play();
+        }
+        else
+        {
+            Debug.LogWarning("AudioManager: musicClip is null!");
+        }
     }
 
     /// Hooks every button currently in the scene. Called once at startup;
@@ -90,6 +170,7 @@ public class AudioManager : MonoBehaviour
 
     public void PlayClickInternal()
     {
+        if (!sfxEnabled) return;
         if (clickSound == null)
             clickSound = Resources.Load<AudioClip>("click");
 
@@ -99,6 +180,7 @@ public class AudioManager : MonoBehaviour
 
     public void PlaySound(AudioClip clip, float volume = 1f)
     {
+        if (!sfxEnabled) return;
         if (sfxSource != null && clip != null)
             sfxSource.PlayOneShot(clip, volume);
     }
