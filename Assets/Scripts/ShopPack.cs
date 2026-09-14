@@ -19,11 +19,9 @@ public class ShopPack : MonoBehaviour
         var s = GameState.I;
         if (s == null) return;
 
-        s.Data.coins += coins;
-        s.Data.gems += gems;
-        s.Save();
-
-        var lobby = FindFirstObjectByType<LobbyUI>();
-        if (lobby) lobby.Refresh();
+        // Shop source deliberately skips the club coin multiplier: a tier bonus
+        // must not inflate currency the player paid money for.
+        RewardService.Grant(Reward.Of(coins: coins, gems: gems), RewardSource.Shop, "PURCHASE COMPLETE");
+        GameEvents.Raise(GameEventType.ShopPurchase, coins);
     }
 }

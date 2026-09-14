@@ -9,10 +9,34 @@ public class LobbyUI : MonoBehaviour
     public HostMessage host;
     public ProfilePanel profile;
 
+    void OnEnable()
+    {
+        if (GameState.I == null) return;
+        GameState.I.Changed -= Refresh;
+        GameState.I.Changed += Refresh;
+    }
+
+    void OnDisable()
+    {
+        if (GameState.I != null) GameState.I.Changed -= Refresh;
+    }
+
     void Start()
     {
         Refresh();
-        if (host) host.Say("WELCOME BACK! READY TO WIN BIG?");
+        if (host) host.Say(Greeting());
+    }
+
+    // The host is the only thing in the lobby that can point at the five
+    // panels, so she says whichever one is actually worth opening.
+    string Greeting()
+    {
+        if (QuestService.ClaimableCount > 0) return "YOUR QUESTS ARE READY TO CLAIM!";
+        if (CardService.PackCount > 0) return "YOU HAVE CARD PACKS WAITING!";
+        if (PuzzleService.IsComplete) return "YOUR PUZZLE IS COMPLETE — GO CLAIM IT!";
+        if (MailService.UnclaimedCount > 0) return "THERE'S SOMETHING IN YOUR INBOX!";
+        if (DailyService.WheelReady(out _)) return "YOUR DAILY SPIN IS READY!";
+        return "WELCOME BACK! READY TO WIN BIG?";
     }
 
     public void Refresh()
@@ -34,6 +58,6 @@ public class LobbyUI : MonoBehaviour
         else
             Debug.Log("Slot game scene not built yet.");
     }
-    public void OnBuy() => Debug.Log("Store not implemented");
+
     public void OnProfile() { if (profile) profile.Open(); }
 }

@@ -1,6 +1,9 @@
-using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
+
+/// Marker so a button is only ever hooked once, without a static registry that
+/// would hold references to destroyed buttons forever.
+public class ClickSound : MonoBehaviour { }
 
 [DefaultExecutionOrder(-1000)]
 public class AudioManager : MonoBehaviour
@@ -11,7 +14,6 @@ public class AudioManager : MonoBehaviour
     public AudioClip clickSound;
 
     AudioSource sfxSource;
-    static readonly HashSet<Button> HookedButtons = new HashSet<Button>();
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
     static void AutoInit()
@@ -45,72 +47,59 @@ public class AudioManager : MonoBehaviour
         }
 
         if (clickSound == null)
-        {
             clickSound = Resources.Load<AudioClip>("click");
-        }
-
-        HookAllExistingButtons();
     }
 
     void Start()
     {
-        HookAllExistingButtons();
+        HookScene();
     }
 
-    void Update()
+    /// Hooks every button currently in the scene. Called once at startup;
+    /// panels hook their own rows as they build them.
+    public static void HookScene()
     {
-        // Keep hooking any dynamically created or enabled buttons
-        if (Time.frameCount % 20 == 0)
-        {
-            HookAllExistingButtons();
-        }
+        var roots = UnityEngine.SceneManagement.SceneManager.GetActiveScene().GetRootGameObjects();
+        for (int i = 0; i < roots.Length; i++)
+            HookChildren(roots[i]);
     }
 
-    public static void HookAllExistingButtons()
+    // Replaces a Resources.FindObjectsOfTypeAll<Button>() sweep that ran every
+    // 20 frames forever. That cost scaled with every button in memory, and a
+    // card album plus a mail list adds hundreds.
+    public static void HookChildren(GameObject root)
     {
-        var buttons = Resources.FindObjectsOfTypeAll<Button>();
+        if (root == null) return;
+        var buttons = root.GetComponentsInChildren<Button>(true);
         for (int i = 0; i < buttons.Length; i++)
-        {
             HookButton(buttons[i]);
-        }
     }
 
     public static void HookButton(Button btn)
     {
         if (btn == null) return;
-        if (!HookedButtons.Contains(btn))
-        {
-            HookedButtons.Add(btn);
-            btn.onClick.AddListener(PlayClick);
-        }
+        if (btn.GetComponent<ClickSound>() != null) return;
+        btn.gameObject.AddComponent<ClickSound>();
+        btn.onClick.AddListener(PlayClick);
     }
 
     public static void PlayClick()
     {
-        if (I != null)
-        {
-            I.PlayClickInternal();
-        }
+        if (I != null) I.PlayClickInternal();
     }
 
     public void PlayClickInternal()
     {
         if (clickSound == null)
-        {
             clickSound = Resources.Load<AudioClip>("click");
-        }
 
         if (sfxSource != null && clickSound != null)
-        {
             sfxSource.PlayOneShot(clickSound, 1f);
-        }
     }
 
     public void PlaySound(AudioClip clip, float volume = 1f)
     {
         if (sfxSource != null && clip != null)
-        {
             sfxSource.PlayOneShot(clip, volume);
-        }
     }
 }

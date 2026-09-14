@@ -26,6 +26,11 @@ public class WheelPanel : MonoBehaviour
     Coroutine spinRoutine;
     Coroutine winPulseRoutine;
 
+    // While a win is on screen the countdown must not overwrite it. Previously
+    // this was inferred by testing the status text for an emoji prefix, which
+    // no shipped font can even render.
+    float resultUntil;
+
     void Awake()
     {
         if (spinButton)
@@ -96,30 +101,19 @@ public class WheelPanel : MonoBehaviour
     {
         if (spinning) return;
 
-#if UNITY_EDITOR
-        // Quick dev affordance: press 'R' while wheel is open to reset cooldown
-#if ENABLE_INPUT_SYSTEM
-        if (UnityEngine.InputSystem.Keyboard.current != null &&
-            UnityEngine.InputSystem.Keyboard.current.rKey.wasPressedThisFrame)
-        {
-            ResetCooldown();
-            return;
-        }
-#else
-        if (Input.GetKeyDown(KeyCode.R))
-        {
-            ResetCooldown();
-            return;
-        }
-#endif
-#endif
+        // The press-R dev shortcut lived here. It is covered by two menu items
+        // now (Reset Wheel Cooldown, Dev > Force Day Rollover), and its legacy
+        // Input.GetKeyDown fallback threw every frame whenever the project's
+        // active input handling did not match the compile define.
 
         // Live countdown timer ticking down every frame
         bool can = CanClaim(out var wait);
+        bool showingResult = Time.unscaledTime < resultUntil;
+
         if (can)
         {
             if (spinButton && !spinButton.interactable) spinButton.interactable = true;
-            if (status && !status.text.StartsWith("🎉") && !status.text.StartsWith("💎") && status.text != "SPIN TO WIN!")
+            if (status && !showingResult && status.text != "SPIN TO WIN!")
             {
                 status.text = "SPIN TO WIN!";
                 status.color = new Color(1f, 0.85f, 0.35f);
@@ -129,33 +123,17 @@ public class WheelPanel : MonoBehaviour
         {
             if (spinButton && spinButton.interactable) spinButton.interactable = false;
 
-            if (status && !status.text.StartsWith("🎉") && !status.text.StartsWith("💎"))
+            if (status && !showingResult)
             {
-                string timeStr = wait.TotalHours >= 1
-                    ? $"{wait.Hours:D2}h {wait.Minutes:D2}m {wait.Seconds:D2}s"
-                    : $"{wait.Minutes:D2}m {wait.Seconds:D2}s";
-                status.text = $"Next spin in {timeStr}";
+                status.text = "Next spin in " + DailyService.FormatWait(wait);
                 status.color = new Color(0.85f, 0.8f, 0.98f);
             }
         }
     }
 
-    public bool CanClaim(out TimeSpan wait)
-    {
-        wait = TimeSpan.Zero;
-        var s = GameState.I;
-        if (s == null) return true;
-        if (string.IsNullOrEmpty(s.Data.lastWheelUtc)) return true;
-        if (!DateTime.TryParse(s.Data.lastWheelUtc, CultureInfo.InvariantCulture,
-                DateTimeStyles.RoundtripKind, out var last))
-            return true;
-
-        var next = last.ToUniversalTime().AddHours(24);
-        var now = DateTime.UtcNow;
-        if (now >= next) return true;
-        wait = next - now;
-        return false;
-    }
+    // Delegates so the wheel, the nav badge and the host greeting all agree on
+    // whether a spin is available, including the moved-clock guard.
+    public bool CanClaim(out TimeSpan wait) => DailyService.WheelReady(out wait);
 
     void Refresh()
     {
@@ -177,10 +155,7 @@ public class WheelPanel : MonoBehaviour
             }
             else
             {
-                string timeStr = wait.TotalHours >= 1
-                    ? $"{wait.Hours:D2}h {wait.Minutes:D2}m {wait.Seconds:D2}s"
-                    : $"{wait.Minutes:D2}m {wait.Seconds:D2}s";
-                status.text = $"Next spin in {timeStr}";
+                status.text = "Next spin in " + DailyService.FormatWait(wait);
                 status.color = new Color(0.85f, 0.8f, 0.98f);
             }
         }
@@ -281,16 +256,24 @@ public class WheelPanel : MonoBehaviour
         long coins = index < coinRewards.Length ? coinRewards[index] : 0;
         int gems = index < gemRewards.Length ? gemRewards[index] : 0;
 
-        if (s != null)
+        // Club tier pays out here rather than in AddCoins, so the wheel bonus
+        // and the slot-win bonus can never stack on the same payout.
+        float mult = ClubService.WheelMultiplier;
+        if (mult > 1f)
         {
-            s.Data.coins += coins;
-            s.Data.gems += gems;
-            s.Data.lastWheelUtc = DateTime.UtcNow.ToString("o");
-            s.Save();
+            coins = (long)System.Math.Round(coins * (double)mult);
+            gems = Mathf.RoundToInt(gems * mult);
         }
 
-        var lobby = FindFirstObjectByType<LobbyUI>();
-        if (lobby) lobby.Refresh();
+        if (s != null)
+        {
+            s.Data.lastWheelUtc = DateTime.UtcNow.ToString("o");
+            s.Save();
+            if (coins > 0) s.AddCoins(coins, RewardSource.Wheel);
+            if (gems > 0) s.AddGems(gems, RewardSource.Wheel);
+        }
+
+        GameEvents.Raise(GameEventType.WheelSpun, coins);
 
         string rewardStr = coins > 0
             ? coins.ToString("N0", CultureInfo.InvariantCulture) + " COINS"
@@ -299,11 +282,14 @@ public class WheelPanel : MonoBehaviour
         bool isJackpot = coins >= 100_000 || gems >= 50;
         if (status)
         {
+            // No emoji: neither shipped font has those codepoints and TMP has
+            // no fallback, so they draw as missing-glyph boxes on device.
             status.text = isJackpot
-                ? $"🎉 JACKPOT! YOU WON {rewardStr}! 🎉"
-                : $"✨ YOU WON {rewardStr}! ✨";
+                ? "JACKPOT!  YOU WON " + rewardStr + "!"
+                : "YOU WON " + rewardStr + "!";
             status.color = new Color(1f, 0.90f, 0.35f);
         }
+        resultUntil = Time.unscaledTime + 4f;
 
         // Pulse winning label & status text
         if (winPulseRoutine != null) StopCoroutine(winPulseRoutine);

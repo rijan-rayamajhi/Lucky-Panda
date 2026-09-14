@@ -89,6 +89,10 @@ public static class LobbyBuilder
         SetSliceBorder(ArtUI + "Bubble_Speech.png", new Vector4(420, 340, 190, 190));
         // Even border all round, so one value covers every side.
         SetSliceBorder(ArtUI + "Panel_Popup2.png", new Vector4(150, 150, 150, 150));
+        // Measured from the art: borders enclose the ornate end caps so only
+        // the flat centre stretches. Vector4 is (left, bottom, right, top).
+        SetSliceBorder(ArtUI + "Btn_Gold.png", new Vector4(218, 99, 218, 94));
+        SetSliceBorder(ArtUI + "Row_Plate.png", new Vector4(213, 43, 215, 43));
 
         var scene = EditorSceneManager.NewScene(NewSceneSetup.DefaultGameObjects, NewSceneMode.Single);
 
@@ -157,6 +161,7 @@ public static class LobbyBuilder
 
         string[] navIcons  = { "Nav_Cards", "Nav_Puzzle", "Nav_Quest", "Nav_Wheel", "Nav_Inbox", "Nav_Club" };
         string[] navTitles = { "CARDS",     "PUZZLE",     "QUESTS",    "WHEEL",     "INBOX",     "CLUB"     };
+        NavTab[] navTabs   = { NavTab.Cards, NavTab.Puzzle, NavTab.Quests, NavTab.Wheel, NavTab.Inbox, NavTab.Club };
         var navButtons = new Button[navIcons.Length];
         for (int k = 0; k < navIcons.Length; k++)
         {
@@ -167,6 +172,7 @@ public static class LobbyBuilder
             le.preferredWidth = 120; le.preferredHeight = 120;
             navButtons[k] = i.gameObject.AddComponent<Button>();
             navButtons[k].targetGraphic = i;
+            BuildNavBadge(i.rectTransform, navTabs[k]);
         }
 
         // Play button (center)
@@ -188,31 +194,31 @@ public static class LobbyBuilder
         heroRT.pivot = new Vector2(0.5f, 0f);
         heroRT.anchoredPosition = new Vector2(275, 0);
 
-        var bubbleSize = new Vector2(700, 520);
+        var bubbleSize = new Vector2(640, 440);
         var bubble = Img(msgRoot, "Bubble", ArtUI + "Bubble_Speech.png");
         bubble.type = Image.Type.Sliced;
         bubble.preserveAspect = false;
         // Same trick as the pill: keep the painted corners and the tail intact
         // while the middle stretches.
         bubble.pixelsPerUnitMultiplier = BubbleSourceHeight / bubbleSize.y;
-        Place(bubble.rectTransform, new Vector2(0, 0), new Vector2(415, 360), bubbleSize);
+        Place(bubble.rectTransform, new Vector2(0, 0), new Vector2(390, 270), bubbleSize);
 
         var bubbleText = Label(bubble.transform, "Text", "WELCOME BACK!");
         bubbleText.color = new Color(0.45f, 0.09f, 0.06f);
-        bubbleText.fontSize = 46;
+        bubbleText.fontSize = 42;
         bubbleText.enableAutoSizing = true;
-        bubbleText.fontSizeMin = 24;
-        bubbleText.fontSizeMax = 52;
-        bubbleText.lineSpacing = -12f;
+        bubbleText.fontSizeMin = 22;
+        bubbleText.fontSizeMax = 46;
+        bubbleText.lineSpacing = -8f;
         var btRT = bubbleText.rectTransform;
         btRT.anchorMin = Vector2.zero;
         btRT.anchorMax = Vector2.one;
-        btRT.offsetMin = new Vector2(30, 24);
-        btRT.offsetMax = new Vector2(-30, -24);
+        btRT.offsetMin = new Vector2(40, 36);
+        btRT.offsetMax = new Vector2(-64, -48);
 
         // Close button to dismiss the host message.
         var bubbleClose = Btn(bubble.transform, "BubbleClose", ArtUI + "Btn_Close.png");
-        Place(bubbleClose.GetComponent<RectTransform>(), new Vector2(1, 1), new Vector2(0.5f, 0.5f), new Vector2(-18, -20), new Vector2(72, 72));
+        Place(bubbleClose.GetComponent<RectTransform>(), new Vector2(1, 1), new Vector2(0.5f, 0.5f), new Vector2(-36, -36), new Vector2(64, 64));
 
         var hostMsg = canvasGO.AddComponent<HostMessage>();
         hostMsg.root = msgRoot;
@@ -227,14 +233,26 @@ public static class LobbyBuilder
         // Bottom-nav destination pages.
         for (int k = 0; k < navIcons.Length; k++)
         {
-            Popup page = navTitles[k] == "WHEEL"
-                ? BuildWheelPanel(canvasGO.transform)
-                : BuildStubPanel(canvasGO.transform, navTitles[k] + "Panel", navTitles[k]);
+            Popup page;
+            switch (navTitles[k])
+            {
+                case "WHEEL":  page = BuildWheelPanel(canvasGO.transform); break;
+                case "QUESTS": page = BuildQuestsPanel(canvasGO.transform); break;
+                case "INBOX":  page = BuildInboxPanel(canvasGO.transform); break;
+                case "CLUB":   page = BuildClubPanel(canvasGO.transform); break;
+                case "PUZZLE": page = BuildPuzzlePanel(canvasGO.transform); break;
+                case "CARDS":  page = BuildCardsPanel(canvasGO.transform); break;
+                default:       page = BuildStubPanel(canvasGO.transform, navTitles[k] + "Panel", navTitles[k]); break;
+            }
             OnClick(navButtons[k], page.Open);
         }
 
         // Shop page opened by the BUY button.
         var shop = BuildShopPanel(canvasGO.transform);
+
+        // Shared reward celebration, and the asset handles runtime code needs.
+        BuildRewardPopup(canvasGO.transform);
+        BuildContentRefs(canvasGO);
 
         // Wire LobbyUI
         var ui = canvasGO.AddComponent<LobbyUI>();
@@ -249,6 +267,20 @@ public static class LobbyBuilder
         OnClick(badgeButton, ui.OnProfile);
         OnClick(play, ui.OnPlay);
         OnClick(buy, shop.Open);
+
+        // Ensure all SafeArea rects are saved with canonical full-stretch anchors (0,0)-(1,1)
+        // so that in-editor serialization never bakes corrupted coordinates.
+        foreach (var sa in Object.FindObjectsByType<SafeArea>(FindObjectsSortMode.None))
+        {
+            var srt = sa.GetComponent<RectTransform>();
+            if (srt != null)
+            {
+                srt.anchorMin = Vector2.zero;
+                srt.anchorMax = Vector2.one;
+                srt.offsetMin = Vector2.zero;
+                srt.offsetMax = Vector2.zero;
+            }
+        }
 
         EditorSceneManager.SaveScene(scene, "Assets/Scenes/Lobby.unity");
         Debug.Log("Lobby scene built.");
@@ -318,33 +350,34 @@ public static class LobbyBuilder
         content.anchorMin = Vector2.zero;
         content.anchorMax = Vector2.one;
         content.offsetMin = new Vector2(58, 36);
-        content.offsetMax = new Vector2(-58, -96);
+        content.offsetMax = new Vector2(-58, -150);
 
-        // Reuse the ornate jackpot banner as the title plate.
+        // Reuse the ornate jackpot banner as the title plate sitting inside the card top.
         var title = Img(card.transform, "TitleBar", ArtUI + "Bar_Major.png");
         title.preserveAspect = true;
-        Place(title.rectTransform, new Vector2(0.5f, 1f), new Vector2(0, 65), new Vector2(540, 165));
+        Place(title.rectTransform, new Vector2(0.5f, 1f), new Vector2(0, -48), new Vector2(460, 130));
         var titleText = Label(title.transform, "Text", "PROFILE");
-        Place(titleText.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0, -8), new Vector2(420, 80));
-        titleText.fontSize = 50;
+        Place(titleText.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0, -8), new Vector2(380, 72));
+        titleText.fontSize = 44;
 
         // Avatar
         var avatar = Img(content, "Avatar", ArtUI + "Icon_Profile.png");
         Place(avatar.rectTransform, new Vector2(0, 1), new Vector2(0, 0), new Vector2(148, 148));
 
-        // Editable display name
-        var nameField = BuildInput(content, "NameField",
-            new Vector2(172, 0), new Vector2(560, 64));
+        // Name input
+        var nameField = BuildInput(content, "NameInput", new Vector2(174, 0), new Vector2(460, 68));
 
-        var levelText = Label(content, "LevelText", "LEVEL 1");
-        Place(levelText.rectTransform, new Vector2(0, 1), new Vector2(172, -74), new Vector2(300, 36));
-        levelText.alignment = TextAlignmentOptions.Left;
+        // Level text
+        var levelText = Label(content, "LevelText", "LVL 1");
+        Place(levelText.rectTransform, new Vector2(0, 1), new Vector2(656, -14), new Vector2(200, 48));
+        levelText.alignment = TextAlignmentOptions.MidlineLeft;
         levelText.fontSize = 32;
+        levelText.color = GoldBright;
 
-        // XP bar
-        var xpSize = new Vector2(560, 48);
+        // XP progress bar
+        var xpSize = new Vector2(716, 44);
         var xpBg = Frame(content, "XpBg", xpSize.y * 0.5f, 6f, Gold, TrackFillTop, TrackFillBottom);
-        Place(xpBg.rectTransform, new Vector2(0, 1), new Vector2(172, -118), xpSize);
+        Place(xpBg.rectTransform, new Vector2(0, 1), new Vector2(174, -92), xpSize);
 
         var xpFill = Frame(xpBg.transform, "XpFill", xpSize.y * 0.5f, 0f,
             XpFillTop, XpFillTop, XpFillBottom);
@@ -370,7 +403,7 @@ public static class LobbyBuilder
             Divider(content, "Rule" + i, firstRow - rowStep * i + rowStep * 0.5f - 4f, 0.22f);
 
         var close = Btn(card.transform, "CloseButton", ArtUI + "Btn_Close.png");
-        Place(close.GetComponent<RectTransform>(), new Vector2(1, 1), new Vector2(0.5f, 0.5f), new Vector2(-10, -50), new Vector2(80, 80));
+        Place(close.GetComponent<RectTransform>(), new Vector2(1, 1), new Vector2(0.5f, 0.5f), new Vector2(-6, -6), new Vector2(72, 72));
 
         var panel = root.gameObject.AddComponent<ProfilePanel>();
         panel.root = root.gameObject;
@@ -471,6 +504,14 @@ public static class LobbyBuilder
     // close button, and an inset Content rect the caller fills.
     static (RectTransform content, Popup popup) BuildPanelShell(Transform parent, string name, string title)
     {
+        return BuildPanelShell<Popup>(parent, name, title, new Vector2(960, 720));
+    }
+
+    // T is the panel component itself, so a page carries its own behaviour
+    // instead of a bare Popup plus a sibling script.
+    static (RectTransform content, T popup) BuildPanelShell<T>(Transform parent, string name,
+        string title, Vector2 cardSize) where T : Popup
+    {
         var root = Panel(parent, name);
         Stretch(root);
 
@@ -480,30 +521,55 @@ public static class LobbyBuilder
         scrim.raycastTarget = true;
         Stretch(scrim.rectTransform);
 
-        var cardSize = new Vector2(960, 720);
-        var card = Img(root, "Card", ArtUI + "Panel_Popup2.png");
+        // Clamped inside safe area so device notches and cutouts don't clip the card
+        var safeContainer = Panel(root, "SafeContainer");
+        Stretch(safeContainer);
+        safeContainer.gameObject.AddComponent<SafeArea>();
+
+        // Constrain card width to max 1280 to ensure wide aspect/notch devices never clip edges
+        Vector2 clampedSize = new Vector2(Mathf.Min(cardSize.x, 1280f), cardSize.y);
+
+        var card = Img(safeContainer, "Card", ArtUI + "Panel_Popup2.png");
         card.type = Image.Type.Sliced;
         card.preserveAspect = false;
         card.raycastTarget = true;
-        card.pixelsPerUnitMultiplier = 1086f / cardSize.y * 1.8f;
-        Place(card.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0, -20), cardSize);
+        card.pixelsPerUnitMultiplier = 1086f / clampedSize.y * 1.8f;
 
-        var titleText = Label(card.transform, "Title", title);
-        Place(titleText.rectTransform, new Vector2(0.5f, 1f), new Vector2(0, -80), new Vector2(640, 90));
+        // A tall card pushed the banner up into the top HUD, covering the coin
+        // pill. Drop it just far enough to clear, and leave the short cards
+        // (wheel, shop, profile) exactly where they were.
+        const float CanvasHalfHeight = 540f;
+        const float BannerHeadroom = 150f;
+        float cardY = Mathf.Min(-40f, CanvasHalfHeight - BannerHeadroom - clampedSize.y * 0.5f);
+        Place(card.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0, cardY), clampedSize);
+
+        // Ornate banner sitting cleanly inside the top of the asset card frame,
+        // without overflowing or sticking out over the top gold border.
+        var banner = Img(card.transform, "TitleBar", ArtUI + "Bar_Major.png");
+        banner.preserveAspect = true;
+        Place(banner.rectTransform, new Vector2(0.5f, 1f), new Vector2(0, -48), new Vector2(460, 130));
+
+        var titleText = Label(banner.transform, "Text", title);
+        Place(titleText.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0, -8), new Vector2(380, 72));
         titleText.alignment = TextAlignmentOptions.Center;
-        titleText.fontSize = 54;
+        titleText.fontSize = 44;
+        titleText.enableAutoSizing = true;
+        titleText.fontSizeMin = 22;
+        titleText.fontSizeMax = 46;
+        titleText.textWrappingMode = TextWrappingModes.NoWrap;
+        UIFactory.Shadowed(titleText, 0.85f, 3f);
 
         var close = Btn(card.transform, "CloseButton", ArtUI + "Btn_Close.png");
-        Place(close.GetComponent<RectTransform>(), new Vector2(1, 1), new Vector2(0.5f, 0.5f), new Vector2(-10, -50), new Vector2(80, 80));
+        Place(close.GetComponent<RectTransform>(), new Vector2(1, 1), new Vector2(0.5f, 0.5f), new Vector2(-6, -6), new Vector2(72, 72));
 
-        // Inset content area, below the title.
+        // Content sits inside the asset frame's natural purple interior.
         var content = Panel(card.transform, "Content");
         content.anchorMin = Vector2.zero;
         content.anchorMax = Vector2.one;
-        content.offsetMin = new Vector2(58, 52);
-        content.offsetMax = new Vector2(-58, -140);
+        content.offsetMin = new Vector2(58, 48);
+        content.offsetMax = new Vector2(-58, -150);
 
-        var popup = root.gameObject.AddComponent<Popup>();
+        var popup = root.gameObject.AddComponent<T>();
         popup.root = root.gameObject;
         OnClick(close, popup.Close);
         OnClick(scrim.gameObject.AddComponent<Button>(), popup.Close);
@@ -599,11 +665,10 @@ public static class LobbyBuilder
             seg.color = new Color(1f, 0.92f, 0.6f);
         }
 
-        var pointer = Label(content, "Pointer", "▼");
-        Place(pointer.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0, 20 + 235f), new Vector2(64, 64));
-        pointer.alignment = TextAlignmentOptions.Center;
-        pointer.fontSize = 64;
-        pointer.color = new Color(1f, 0.85f, 0.3f);
+        // Drawn as a mesh, not the character U+25BC: neither shipped font has
+        // that glyph and TMP has no fallback, so it was rendering as a box.
+        var pointer = ShapeOf(content, "Pointer", UIShape.TriangleDown, new Color(1f, 0.85f, 0.3f));
+        Place(pointer.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0, 20 + 235f), new Vector2(56, 66));
 
         // Center SPIN button (does not rotate with the wheel).
         var spinFrame = Frame(content, "SpinButton", 80f, 6f, GoldBright,
@@ -670,6 +735,446 @@ public static class LobbyBuilder
         pack.coins = coins;
         pack.gems = gems;
         pack.button = btn;
+    }
+
+    // ---- bottom-nav destinations --------------------------------------
+
+    static QuestsPanel BuildQuestsPanel(Transform parent)
+    {
+        var (content, panel) = BuildPanelShell<QuestsPanel>(parent, "QuestsPanel", "QUESTS", new Vector2(1400, 880));
+
+        var subtitle = Label(content, "Subtitle", "RESETS DAILY");
+        Place(subtitle.rectTransform, new Vector2(0.5f, 1f), new Vector2(0, 0), new Vector2(700, 36));
+        subtitle.fontSize = 26;
+        subtitle.color = GoldBright;
+
+        var host = Panel(content, "ScrollHost");
+        host.anchorMin = Vector2.zero;
+        host.anchorMax = Vector2.one;
+        host.offsetMin = Vector2.zero;
+        host.offsetMax = new Vector2(0, -48);
+
+        panel.listContent = UIFactory.Scroll(host, "Scroll", 12f);
+        panel.subtitle = subtitle;
+        return panel;
+    }
+
+    static InboxPanel BuildInboxPanel(Transform parent)
+    {
+        var (content, panel) = BuildPanelShell<InboxPanel>(parent, "InboxPanel", "INBOX", new Vector2(1400, 880));
+
+        var host = Panel(content, "ScrollHost");
+        host.anchorMin = Vector2.zero;
+        host.anchorMax = Vector2.one;
+        host.offsetMin = new Vector2(0, 108);
+        host.offsetMax = Vector2.zero;
+
+        panel.listContent = UIFactory.Scroll(host, "Scroll", 12f);
+
+        var empty = Label(content, "Empty", "NO MESSAGES YET");
+        Place(empty.rectTransform, new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(700, 60));
+        empty.fontSize = 34;
+        empty.color = new Color(0.80f, 0.72f, 0.95f);
+        panel.emptyLabel = empty;
+
+        var claimAll = PillButton(content, "ClaimAll", "CLAIM ALL", new Vector2(300, 68));
+        Place(claimAll.GetComponent<RectTransform>(), new Vector2(0.5f, 0f), new Vector2(0, 24), new Vector2(300, 68));
+        panel.claimAllButton = claimAll;
+
+        return panel;
+    }
+
+    static ClubPanel BuildClubPanel(Transform parent)
+    {
+        var (content, panel) = BuildPanelShell<ClubPanel>(parent, "ClubPanel", "PANDA CLUB", new Vector2(1100, 820));
+
+        var crest = Img(content, "Crest", ArtUI + "Bar_Grand.png");
+        crest.preserveAspect = true;
+        Place(crest.rectTransform, new Vector2(0.5f, 1f), new Vector2(0, -6), new Vector2(420, 150));
+        panel.crest = crest;
+
+        var tierName = Label(crest.transform, "TierName", "BRONZE");
+        Place(tierName.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0, -6), new Vector2(340, 70));
+        tierName.fontSize = 46;
+        panel.tierNameText = tierName;
+
+        var stars = Panel(content, "StarRow");
+        Place(stars, new Vector2(0.5f, 1f), new Vector2(0, -170), new Vector2(300, 44));
+        UIFactory.Configure(stars.gameObject.AddComponent<HorizontalLayoutGroup>(), 12f, TextAnchor.MiddleCenter);
+        panel.starRow = stars;
+
+        var bar = Frame(content, "PointsTrack", 18f, 4f, Gold, TrackFillTop, TrackFillBottom);
+        Place(bar.rectTransform, new Vector2(0.5f, 1f), new Vector2(0, -228), new Vector2(720, 38));
+        var fill = Frame(bar.transform, "Fill", 18f, 0f, XpFillTop, XpFillTop, XpFillBottom);
+        Inset(fill.rectTransform, 5);
+        panel.progressFill = fill;
+
+        var points = Label(bar.transform, "Points", "0 / 2,500");
+        Stretch(points.rectTransform);
+        points.fontSize = 24;
+        panel.pointsText = points;
+
+        var next = Label(content, "NextTier", "2,500 POINTS TO SILVER");
+        Place(next.rectTransform, new Vector2(0.5f, 1f), new Vector2(0, -274), new Vector2(800, 34));
+        next.fontSize = 26;
+        next.color = new Color(0.80f, 0.72f, 0.95f);
+        panel.nextTierLabel = next;
+
+        Divider(content, "ClubRule", -316, 0.45f);
+
+        panel.perksNowColumn = PerkColumn(content, "PerksNow", "ACTIVE PERKS", -336, -1);
+        panel.perksNextColumn = PerkColumn(content, "PerksNext", "NEXT TIER", -336, 1);
+
+        return panel;
+    }
+
+    static RectTransform PerkColumn(RectTransform content, string name, string heading, float y, int side)
+    {
+        float x = side < 0 ? 0f : 500f;
+
+        // Each column gets its own plate, so "what I have" and "what's next"
+        // read as two things rather than one block of text in two halves.
+        var plate = Frame(content, name + "Plate", 18f, 0f, Color.clear,
+            side < 0 ? new Color(0.20f, 0.12f, 0.30f, 0.95f) : new Color(0.11f, 0.06f, 0.20f, 0.92f),
+            side < 0 ? new Color(0.09f, 0.05f, 0.17f, 0.95f) : new Color(0.05f, 0.02f, 0.10f, 0.94f));
+        Place(plate.rectTransform, new Vector2(0, 1), new Vector2(x, y + 8), new Vector2(484, 248));
+        plate.rectTransform.pivot = new Vector2(0, 1);
+
+        var header = Label(plate.transform, "Header", heading);
+        Place(header.rectTransform, new Vector2(0, 1), new Vector2(24, -14), new Vector2(440, 38));
+        header.alignment = TextAlignmentOptions.MidlineLeft;
+        header.fontSize = 26;
+        header.color = side < 0 ? GoldBright : new Color(0.80f, 0.72f, 0.95f);
+        UIFactory.Shadowed(header);
+
+        var column = Panel(plate.transform, name);
+        Place(column, new Vector2(0, 1), new Vector2(24, -60), new Vector2(436, 180));
+        column.pivot = new Vector2(0, 1);
+        var layout = UIFactory.Configure(column.gameObject.AddComponent<VerticalLayoutGroup>(), 6f, TextAnchor.UpperLeft);
+        layout.childForceExpandWidth = true;
+        return column;
+    }
+
+    static PuzzlePanel BuildPuzzlePanel(Transform parent)
+    {
+        var (content, panel) = BuildPanelShell<PuzzlePanel>(parent, "PuzzlePanel", "PUZZLE", new Vector2(1000, 880));
+
+        var title = Label(content, "PuzzleTitle", "PANDA PARADISE");
+        Place(title.rectTransform, new Vector2(0.5f, 1f), new Vector2(0, -2), new Vector2(760, 46));
+        title.fontSize = 36;
+        title.enableAutoSizing = true;
+        title.fontSizeMin = 20;
+        title.fontSizeMax = 38;
+        title.textWrappingMode = TextWrappingModes.NoWrap;
+        title.color = GoldBright;
+        UIFactory.Shadowed(title, 0.8f, 3f);
+        panel.titleText = title;
+
+        var progress = Label(content, "Progress", "0 / 9");
+        Place(progress.rectTransform, new Vector2(0.5f, 1f), new Vector2(0, -50), new Vector2(400, 42));
+        progress.fontSize = 32;
+        progress.color = new Color(1f, 0.91f, 0.62f);
+        panel.progressText = progress;
+
+        // Recessed well behind the tiles, so an empty board still looks like a
+        // frame waiting to be filled rather than a hole in the panel.
+        const float board = 470f;
+        // Borderless: every tile already draws its own rim, so a frame here
+        // would just be a second outline around the same square.
+        var well = Frame(content, "Well", 16f, 0f, Color.clear,
+            new Color(0.05f, 0.02f, 0.10f, 1f), new Color(0.02f, 0.01f, 0.05f, 1f));
+        Place(well.rectTransform, new Vector2(0.5f, 1f), new Vector2(0, -102), new Vector2(board + 16f, board + 16f));
+        well.rectTransform.pivot = new Vector2(0.5f, 1f);
+
+        var boardRect = Panel(content, "Board");
+        Place(boardRect, new Vector2(0.5f, 1f), new Vector2(0, -110), new Vector2(board, board));
+        boardRect.pivot = new Vector2(0.5f, 1f);
+        var grid = boardRect.gameObject.AddComponent<GridLayoutGroup>();
+        grid.cellSize = new Vector2((board - 12f) / 3f, (board - 12f) / 3f);
+        grid.spacing = new Vector2(6, 6);
+        grid.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
+        grid.constraintCount = 3;
+        grid.childAlignment = TextAnchor.UpperCenter;
+        panel.grid = boardRect;
+        panel.boardSize = board;
+
+        // Sits clear of the board's bottom edge: the board ends 156px up from
+        // the content floor, and these two stack below that.
+        var hint = Label(content, "Hint", "Pieces come from quests, card sets and the wheel");
+        Place(hint.rectTransform, new Vector2(0.5f, 0f), new Vector2(0, 100), new Vector2(860, 44));
+        hint.fontSize = 24;
+        hint.color = new Color(0.80f, 0.72f, 0.95f);
+        panel.hintText = hint;
+
+        var claim = PillButton(content, "ClaimPuzzle", "KEEP COLLECTING", new Vector2(380, 76));
+        Place(claim.GetComponent<RectTransform>(), new Vector2(0.5f, 0f), new Vector2(0, 14), new Vector2(380, 76));
+        panel.claimButton = claim;
+
+        return panel;
+    }
+
+    static CardsPanel BuildCardsPanel(Transform parent)
+    {
+        var (content, panel) = BuildPanelShell<CardsPanel>(parent, "CardsPanel", "CARD ALBUM", new Vector2(1400, 900));
+
+        var tabs = Panel(content, "Tabs");
+        Place(tabs, new Vector2(0.5f, 1f), new Vector2(0, 0), new Vector2(1160, 56));
+        UIFactory.Configure(tabs.gameObject.AddComponent<HorizontalLayoutGroup>(), 10f, TextAnchor.MiddleCenter);
+        panel.tabsRow = tabs;
+
+        var album = Panel(content, "Album");
+        Place(album, new Vector2(0, 1), new Vector2(0, -68), new Vector2(440, 544));
+        album.pivot = new Vector2(0, 1);
+        var grid = album.gameObject.AddComponent<GridLayoutGroup>();
+        // 138x174 maintains the card frame art's 0.79 aspect ratio while fitting 3 rows inside the card bounds.
+        grid.cellSize = new Vector2(138, 174);
+        grid.spacing = new Vector2(12, 10);
+        grid.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
+        grid.constraintCount = 3;
+        grid.childAlignment = TextAnchor.UpperLeft;
+        panel.grid = album;
+
+        // Right-hand set summary, on its own recessed plate
+        var side = Frame(content, "SetPlate", 20f, 0f, Color.clear,
+            new Color(0.15f, 0.08f, 0.26f, 0.92f), new Color(0.07f, 0.03f, 0.13f, 0.94f));
+        Place(side.rectTransform, new Vector2(0, 1), new Vector2(456, -68), new Vector2(708, 544));
+        side.rectTransform.pivot = new Vector2(0, 1);
+
+        var setName = Label(side.transform, "SetName", "BAMBOO GROVE");
+        Place(setName.rectTransform, new Vector2(0, 1), new Vector2(24, -14), new Vector2(650, 48));
+        setName.alignment = TextAlignmentOptions.MidlineLeft;
+        setName.fontSize = 36;
+        setName.enableAutoSizing = true;
+        setName.fontSizeMin = 22;
+        setName.fontSizeMax = 38;
+        setName.textWrappingMode = TextWrappingModes.NoWrap;
+        setName.color = GoldBright;
+        UIFactory.Shadowed(setName, 0.8f, 3f);
+        panel.setNameText = setName;
+
+        var count = Label(side.transform, "SetCount", "0 / 9");
+        Place(count.rectTransform, new Vector2(0, 1), new Vector2(24, -68), new Vector2(300, 38));
+        count.alignment = TextAlignmentOptions.MidlineLeft;
+        count.fontSize = 30;
+        count.color = new Color(1f, 0.91f, 0.62f);
+        panel.countText = count;
+
+        var track = Frame(side.transform, "SetTrack", 16f, 3f, Gold, TrackFillTop, TrackFillBottom);
+        Place(track.rectTransform, new Vector2(0, 1), new Vector2(24, -114), new Vector2(650, 30));
+        var setFill = Frame(track.transform, "Fill", 16f, 0f, XpFillTop, XpFillTop, XpFillBottom);
+        Inset(setFill.rectTransform, 4);
+        panel.setProgressFill = setFill;
+
+        Divider(side.transform as RectTransform, "SetRule", -156, 0.35f);
+
+        var rewardHeader = Label(side.transform, "RewardHeader", "SET REWARD");
+        Place(rewardHeader.rectTransform, new Vector2(0, 1), new Vector2(24, -172), new Vector2(400, 30));
+        rewardHeader.alignment = TextAlignmentOptions.MidlineLeft;
+        rewardHeader.fontSize = 22;
+        rewardHeader.color = new Color(0.80f, 0.72f, 0.95f);
+
+        var rewardRow = Panel(side.transform, "SetReward");
+        Place(rewardRow, new Vector2(0, 1), new Vector2(24, -208), new Vector2(650, 44));
+        rewardRow.pivot = new Vector2(0, 1);
+        panel.setRewardRow = rewardRow;
+
+        var claimSet = PillButton(side.transform, "ClaimSet", "INCOMPLETE", new Vector2(290, 68));
+        Place(claimSet.GetComponent<RectTransform>(), new Vector2(0, 1), new Vector2(24, -452), new Vector2(290, 68));
+        panel.claimSetButton = claimSet;
+
+        var openPack = PillButton(side.transform, "OpenPack", "NO PACKS", new Vector2(290, 68));
+        Place(openPack.GetComponent<RectTransform>(), new Vector2(0, 1), new Vector2(336, -452), new Vector2(290, 68));
+        panel.openPackButton = openPack;
+
+        BuildPackOverlay(panel);
+        return panel;
+    }
+
+    static void BuildPackOverlay(CardsPanel panel)
+    {
+        var overlay = Panel(panel.transform, "PackOverlay");
+        Stretch(overlay);
+
+        var scrim = Img(overlay, "Scrim", null);
+        scrim.sprite = AssetDatabase.GetBuiltinExtraResource<Sprite>("UI/Skin/UISprite.psd");
+        scrim.color = new Color(0.02f, 0.01f, 0.05f, 0.93f);
+        scrim.raycastTarget = true;
+        Stretch(scrim.rectTransform);
+
+        var headline = Label(overlay, "Headline", "CARD PACK");
+        Place(headline.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0, 250), new Vector2(1100, 70));
+        headline.fontSize = 52;
+        headline.color = GoldBright;
+        panel.packHeadline = headline;
+
+        var row = Panel(overlay, "Cards");
+        Place(row, new Vector2(0.5f, 0.5f), new Vector2(0, 0), new Vector2(900, 300));
+        UIFactory.Configure(row.gameObject.AddComponent<HorizontalLayoutGroup>(), 30f, TextAnchor.MiddleCenter);
+        panel.packCardRow = row;
+
+        var tap = Label(overlay, "Tap", "TAP TO CONTINUE");
+        Place(tap.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0, -230), new Vector2(700, 44));
+        tap.fontSize = 28;
+        tap.color = new Color(0.80f, 0.72f, 0.95f);
+
+        var dismiss = scrim.gameObject.AddComponent<Button>();
+        dismiss.transition = Selectable.Transition.None;
+        panel.packDismissButton = dismiss;
+
+        overlay.gameObject.SetActive(false);
+        panel.packOverlay = overlay.gameObject;
+    }
+
+    // ---- shared additions ----------------------------------------------
+
+    static void BuildNavBadge(RectTransform icon, NavTab tab)
+    {
+        var badge = Panel(icon, "Badge");
+        Place(badge, new Vector2(1f, 1f), new Vector2(-4f, -4f), new Vector2(46f, 46f));
+
+        var disc = ShapeOf(badge, "Disc", UIShape.Circle, new Color(0.86f, 0.17f, 0.20f, 1f));
+        Stretch(disc.rectTransform);
+
+        var count = Label(badge.transform, "Count", "0");
+        Stretch(count.rectTransform);
+        count.fontSize = 26;
+        count.alignment = TextAlignmentOptions.Center;
+
+        var nb = icon.gameObject.AddComponent<NavBadge>();
+        nb.tab = tab;
+        nb.badgeRoot = badge.gameObject;
+        nb.countText = count;
+
+        badge.gameObject.SetActive(false);
+    }
+
+    static void BuildRewardPopup(Transform canvas)
+    {
+        var root = Panel(canvas, "RewardPopup");
+        Stretch(root);
+
+        var scrim = Img(root, "Scrim", null);
+        scrim.sprite = AssetDatabase.GetBuiltinExtraResource<Sprite>("UI/Skin/UISprite.psd");
+        scrim.color = new Color(0f, 0f, 0f, 0.55f);
+        scrim.raycastTarget = true;
+        Stretch(scrim.rectTransform);
+
+        var card = Frame(root, "Card", 30f, 6f, GoldBright, PillFillTop, PillFillBottom);
+        card.raycastTarget = true;
+        Place(card.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0, 40), new Vector2(820, 300));
+
+        var headline = Label(card.transform, "Headline", "YOU GOT");
+        Place(headline.rectTransform, new Vector2(0.5f, 1f), new Vector2(0, -34), new Vector2(740, 66));
+        headline.fontSize = 50;
+        headline.color = GoldBright;
+        headline.enableAutoSizing = true;
+        headline.fontSizeMin = 26;
+        headline.fontSizeMax = 52;
+
+        var body = Label(card.transform, "Body", "");
+        Place(body.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0, -34), new Vector2(740, 150));
+        body.fontSize = 38;
+        body.enableAutoSizing = true;
+        body.fontSizeMin = 20;
+        body.fontSizeMax = 40;
+
+        var popup = canvas.gameObject.AddComponent<RewardPopup>();
+        popup.root = root.gameObject;
+        popup.card = card.rectTransform;
+        popup.headline = headline;
+        popup.body = body;
+
+        OnClick(scrim.gameObject.AddComponent<Button>(), popup.Dismiss);
+        root.gameObject.SetActive(false);
+    }
+
+    const string ArtSym = "Assets/Art/Symbols/";
+    const string ArtPuzzle = "Assets/Art/Puzzles/";
+
+    static void BuildContentRefs(GameObject canvasGO)
+    {
+        var refs = canvasGO.AddComponent<ContentRefs>();
+        refs.iconCoin = Load(ArtUI + "Icon_Coin.png");
+        refs.iconGem = Load(ArtUI + "Icon_Gem.png");
+        refs.iconGift = Load(ArtUI + "Icon_Gift.png");
+        refs.panelCard = Load(ArtUI + "Panel_Popup2.png");
+        refs.closeButton = Load(ArtUI + "Btn_Close.png");
+        refs.barMajor = Load(ArtUI + "Bar_Major.png");
+        refs.barGrand = Load(ArtUI + "Bar_Grand.png");
+        refs.buttonPlate = Load(ArtUI + "Btn_Gold.png");
+        refs.rowPlate = Load(ArtUI + "Row_Plate.png");
+        refs.cardFrame = Load(ArtUI + "Card_Frame.png");
+
+        refs.cardSymbols = new[]
+        {
+            Load(ArtSym + "Sym_10.png"), Load(ArtSym + "Sym_J.png"), Load(ArtSym + "Sym_Q.png"),
+            Load(ArtSym + "Sym_K.png"), Load(ArtSym + "Sym_A.png"), Load(ArtSym + "Sym_Wild.png"),
+            Load(ArtSym + "Sym_Scatter.png")
+        };
+
+        // Index-aligned to PuzzleDef.imageIndex in Content.Puzzles. Each source
+        // is 1248px square, which divides evenly by both 3 and 4 so neither
+        // board shape slices on a half pixel.
+        refs.puzzleImages = new[]
+        {
+            Load(ArtPuzzle + "Puzzle_01.png"),   // PANDA PARADISE, 3x3
+            Load(ArtPuzzle + "Puzzle_02.png"),   // GOLDEN PAGODA,  3x3
+            Load(ArtPuzzle + "Puzzle_03.png")    // JADE FORTUNE,   4x4
+        };
+
+        refs.frameMaterial = FrameMaterial;
+        refs.displayFont = DisplayFont;
+    }
+
+    static ShapeGraphic ShapeOf(Transform parent, string name, UIShape shape, Color color)
+    {
+        var go = new GameObject(name, typeof(ShapeGraphic));
+        go.transform.SetParent(parent, false);
+        var s = go.GetComponent<ShapeGraphic>();
+        s.shape = shape;
+        s.color = color;
+        s.raycastTarget = false;
+        return s;
+    }
+
+    static Button PillButton(Transform parent, string name, string text, Vector2 size)
+    {
+        Graphic graphic;
+        var plate = Load(ArtUI + "Btn_Gold.png");
+        if (plate != null)
+        {
+            var img = Img(parent, name, ArtUI + "Btn_Gold.png");
+            img.type = Image.Type.Sliced;
+            img.preserveAspect = false;
+            img.raycastTarget = true;
+            img.pixelsPerUnitMultiplier = UIFactory.ButtonArtHeight / Mathf.Max(1f, size.y);
+            img.rectTransform.sizeDelta = size;
+            graphic = img;
+        }
+        else
+        {
+            var frame = Frame(parent, name, size.y * 0.5f, 3f, GoldBright,
+                new Color(0.16f, 0.42f, 0.12f, 1f), new Color(0.08f, 0.24f, 0.07f, 1f));
+            frame.raycastTarget = true;
+            frame.rectTransform.sizeDelta = size;
+            graphic = frame;
+        }
+
+        var label = Label(graphic.transform, "Text", text);
+        Stretch(label.rectTransform);
+        label.rectTransform.offsetMin = new Vector2(size.x * 0.14f, 0f);
+        label.rectTransform.offsetMax = new Vector2(-size.x * 0.14f, 0f);
+        label.fontSize = 30;
+        label.alignment = TextAlignmentOptions.Center;
+        label.textWrappingMode = TextWrappingModes.NoWrap;
+        label.enableAutoSizing = true;
+        label.fontSizeMin = 14;
+        label.fontSizeMax = 32;
+        UIFactory.Shadowed(label, 0.85f, 2f);
+
+        var btn = graphic.gameObject.AddComponent<Button>();
+        btn.targetGraphic = graphic;
+        return btn;
     }
 
     static void SetSliceBorder(string path, Vector4 border)
