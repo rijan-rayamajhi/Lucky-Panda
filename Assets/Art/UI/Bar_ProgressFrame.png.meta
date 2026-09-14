@@ -1,0 +1,535 @@
+fileFormatVersion: 2
+guid: dbc5cb421be8544998db740f6127c8bb
+TextureImporter:
+  internalIDToNameTable:
+  - first:
+      213: -4889878535771018122
+    second: Bar_ProgressFrame_0
+  - first:
+      213: 4654097850469001478
+    second: Bar_ProgressFrame_1
+  - first:
+      213: 2088464141377256362
+    second: Bar_ProgressFrame_2
+  - first:
+      213: -5382557810772620135
+    second: Bar_ProgressFrame_3
+  - first:
+      213: -6810911803067231603
+    second: Bar_ProgressFrame_4
+  - first:
+      213: -7783966103760382863
+    second: Bar_ProgressFrame_5
+  - first:
+      213: -6473423323170280531
+    second: Bar_ProgressFrame_6
+  - first:
+      213: -7536745522394920200
+    second: Bar_ProgressFrame_7
+  - first:
+      213: 6533787827128506996
+    second: Bar_ProgressFrame_8
+  - first:
+      213: 532565524097597389
+    second: Bar_ProgressFrame_9
+  - first:
+      213: -5214129739638037627
+    second: Bar_ProgressFrame_10
+  - first:
+      213: 148187098400066784
+    second: Bar_ProgressFrame_11
+  - first:
+      213: -2674643356175982877
+    second: Bar_ProgressFrame_12
+  - first:
+      213: -1182494081796820280
+    second: Bar_ProgressFrame_13
+  - first:
+      213: 9130585770455966947
+    second: Bar_ProgressFrame_14
+  externalObjects: {}
+  serializedVersion: 13
+  mipmaps:
+    mipMapMode: 0
+    enableMipMap: 0
+    sRGBTexture: 1
+    linearTexture: 0
+    fadeOut: 0
+    borderMipMap: 0
+    mipMapsPreserveCoverage: 0
+    alphaTestReferenceValue: 0.5
+    mipMapFadeDistanceStart: 1
+    mipMapFadeDistanceEnd: 3
+  bumpmap:
+    convertToNormalMap: 0
+    externalNormalMap: 0
+    heightScale: 0.25
+    normalMapFilter: 0
+    flipGreenChannel: 0
+  isReadable: 0
+  streamingMipmaps: 0
+  streamingMipmapsPriority: 0
+  vTOnly: 0
+  ignoreMipmapLimit: 0
+  grayScaleToAlpha: 0
+  generateCubemap: 6
+  cubemapConvolution: 0
+  seamlessCubemap: 0
+  textureFormat: 1
+  maxTextureSize: 2048
+  textureSettings:
+    serializedVersion: 2
+    filterMode: 1
+    aniso: 1
+    mipBias: 0
+    wrapU: 1
+    wrapV: 1
+    wrapW: 1
+  nPOTScale: 0
+  lightmap: 0
+  compressionQuality: 50
+  spriteMode: 1
+  spriteExtrude: 1
+  spriteMeshType: 1
+  alignment: 0
+  spritePivot: {x: 0.5, y: 0.5}
+  spritePixelsToUnits: 100
+  spriteBorder: {x: 330, y: 90, z: 330, w: 90}
+  spriteGenerateFallbackPhysicsShape: 1
+  alphaUsage: 1
+  alphaIsTransparency: 1
+  spriteTessellationMethod: 0
+  spriteTessellationDetail: -1
+  spriteGeometrySubdivision: -1
+  textureType: 8
+  textureShape: 1
+  singleChannelComponent: 0
+  flipbookRows: 1
+  flipbookColumns: 1
+  maxTextureSizeSet: 0
+  compressionQualitySet: 0
+  textureFormatSet: 0
+  ignorePngGamma: 0
+  applyGammaDecoding: 0
+  swizzle: 50462976
+  cookieLightType: 0
+  platformSettings:
+  - serializedVersion: 4
+    buildTarget: DefaultTexturePlatform
+    maxTextureSize: 512
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 1
+    compressionQuality: 50
+    crunchedCompression: 1
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
+  - serializedVersion: 4
+    buildTarget: Standalone
+    maxTextureSize: 2048
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 1
+    compressionQuality: 50
+    crunchedCompression: 0
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
+  - serializedVersion: 4
+    buildTarget: WebGL
+    maxTextureSize: 2048
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 1
+    compressionQuality: 50
+    crunchedCompression: 0
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
+  - serializedVersion: 4
+    buildTarget: iOS
+    maxTextureSize: 2048
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 1
+    compressionQuality: 50
+    crunchedCompression: 0
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
+  spriteSheet:
+    serializedVersion: 2
+    sprites:
+    - serializedVersion: 2
+      name: Bar_ProgressFrame_0
+      rect:
+        serializedVersion: 2
+        x: 0
+        y: 0
+        width: 2172
+        height: 650
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 67caf802169a32cb0800000000000000
+      internalID: -4889878535771018122
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Bar_ProgressFrame_1
+      rect:
+        serializedVersion: 2
+        x: 730
+        y: 612
+        width: 33
+        height: 34
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 6092d17265da69040800000000000000
+      internalID: 4654097850469001478
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Bar_ProgressFrame_2
+      rect:
+        serializedVersion: 2
+        x: 762
+        y: 596
+        width: 42
+        height: 51
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: aabbee84217bbfc10800000000000000
+      internalID: 2088464141377256362
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Bar_ProgressFrame_3
+      rect:
+        serializedVersion: 2
+        x: 802
+        y: 608
+        width: 36
+        height: 28
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 99cc4e960305d45b0800000000000000
+      internalID: -5382557810772620135
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Bar_ProgressFrame_4
+      rect:
+        serializedVersion: 2
+        x: 861
+        y: 582
+        width: 55
+        height: 84
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: d8299a50dc7ca71a0800000000000000
+      internalID: -6810911803067231603
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Bar_ProgressFrame_5
+      rect:
+        serializedVersion: 2
+        x: 937
+        y: 594
+        width: 74
+        height: 42
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 1745ea1e11cc9f390800000000000000
+      internalID: -7783966103760382863
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Bar_ProgressFrame_6
+      rect:
+        serializedVersion: 2
+        x: 1036
+        y: 608
+        width: 15
+        height: 28
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: dabe4b509c7c926a0800000000000000
+      internalID: -6473423323170280531
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Bar_ProgressFrame_7
+      rect:
+        serializedVersion: 2
+        x: 1182
+        y: 635
+        width: 7
+        height: 7
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 8fa8227f0e9186790800000000000000
+      internalID: -7536745522394920200
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Bar_ProgressFrame_8
+      rect:
+        serializedVersion: 2
+        x: 1259
+        y: 624
+        width: 9
+        height: 13
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 47a14c9496dacaa50800000000000000
+      internalID: 6533787827128506996
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Bar_ProgressFrame_9
+      rect:
+        serializedVersion: 2
+        x: 746
+        y: 610
+        width: 13
+        height: 15
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: dcff473c58d046700800000000000000
+      internalID: 532565524097597389
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Bar_ProgressFrame_10
+      rect:
+        serializedVersion: 2
+        x: 1014
+        y: 616
+        width: 7
+        height: 14
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 5832310a0a0b3a7b0800000000000000
+      internalID: -5214129739638037627
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Bar_ProgressFrame_11
+      rect:
+        serializedVersion: 2
+        x: 1442
+        y: 604
+        width: 31
+        height: 24
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 0ec8e6081677e0200800000000000000
+      internalID: 148187098400066784
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Bar_ProgressFrame_12
+      rect:
+        serializedVersion: 2
+        x: 1583
+        y: 616
+        width: 13
+        height: 12
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 3ee9546d902c1ead0800000000000000
+      internalID: -2674643356175982877
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Bar_ProgressFrame_13
+      rect:
+        serializedVersion: 2
+        x: 627
+        y: 31
+        width: 6
+        height: 6
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 8c2bf71d5efe69fe0800000000000000
+      internalID: -1182494081796820280
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Bar_ProgressFrame_14
+      rect:
+        serializedVersion: 2
+        x: 1327
+        y: 15
+        width: 9
+        height: 9
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 3e4a34fd16b56be70800000000000000
+      internalID: 9130585770455966947
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    outline: []
+    customData: 
+    physicsShape: []
+    bones: []
+    spriteID: 5e97eb03825dee720800000000000000
+    internalID: 0
+    vertices: []
+    indices: 
+    edges: []
+    weights: []
+    secondaryTextures: []
+    spriteCustomMetadata:
+      entries: []
+    nameFileIdTable:
+      Bar_ProgressFrame_0: -4889878535771018122
+      Bar_ProgressFrame_1: 4654097850469001478
+      Bar_ProgressFrame_10: -5214129739638037627
+      Bar_ProgressFrame_11: 148187098400066784
+      Bar_ProgressFrame_12: -2674643356175982877
+      Bar_ProgressFrame_13: -1182494081796820280
+      Bar_ProgressFrame_14: 9130585770455966947
+      Bar_ProgressFrame_2: 2088464141377256362
+      Bar_ProgressFrame_3: -5382557810772620135
+      Bar_ProgressFrame_4: -6810911803067231603
+      Bar_ProgressFrame_5: -7783966103760382863
+      Bar_ProgressFrame_6: -6473423323170280531
+      Bar_ProgressFrame_7: -7536745522394920200
+      Bar_ProgressFrame_8: 6533787827128506996
+      Bar_ProgressFrame_9: 532565524097597389
+  mipmapLimitGroupName: 
+  pSDRemoveMatte: 0
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
