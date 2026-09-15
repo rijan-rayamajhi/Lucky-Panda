@@ -58,6 +58,8 @@ public static class SlotMathCheck
 
     static void CheckRules(SlotGameDef def)
     {
+        if (def.payMode == PayMode.AnywhereCount) { CheckAnywhereRules(def); return; }
+
         // Filler: three symbols that pay nothing together and aren't any-combo
         // members, so only the middle row can win.
         SymbolId f1, f2, f3;
@@ -102,6 +104,73 @@ public static class SlotMathCheck
         else Pass($"scatters award {def.freeSpinsAwarded} free spins + {def.scatterBetMultiplier}x bet");
     }
 
+    // Build a grid holding exactly `count` of `sym` plus `wildCount` wilds; the
+    // rest is a spread of other paying symbols, each kept below the pay
+    // threshold, so only `sym` (with the wilds substituting) can win.
+    static SymbolId[,] AnywhereGrid(SlotGameDef def, SymbolId sym, int count, int wildCount)
+    {
+        var fillers = new List<SymbolId>();
+        foreach (var kv in def.payouts) if (kv.Key != sym) fillers.Add(kv.Key);
+
+        var g = new SymbolId[def.cols, def.rows];
+        int placed = 0, placedWild = 0, fi = 0;
+        for (int c = 0; c < def.cols; c++)
+            for (int r = 0; r < def.rows; r++)
+            {
+                if (placed < count) { g[c, r] = sym; placed++; }
+                else if (placedWild < wildCount) { g[c, r] = def.wildSymbol; placedWild++; }
+                else { g[c, r] = fillers[fi++ % fillers.Count]; }
+            }
+        return g;
+    }
+
+    static void CheckAnywhereRules(SlotGameDef def)
+    {
+        if (def.cascadeMultiplierLadder == null || def.cascadeMultiplierLadder.Length == 0 ||
+            def.cascadeMultiplierLadder[0] != 1)
+            Fail("cascade ladder must start at 1 (the un-cascaded first evaluation)");
+        else
+            Pass($"cascade ladder [{string.Join(",", def.cascadeMultiplierLadder)}], cap {def.maxCascades}");
+
+        const long bet = 100_000;
+        long unit = bet / def.anywhereBetDivisor;
+        int min = def.anywhereMinCount;
+
+        // Highest-paying fruit, to test the count tiers against.
+        SymbolId sym = SymbolId.Cherry; int basePay = 0;
+        foreach (var kv in def.payouts)
+            if (kv.Value > basePay) { sym = kv.Key; basePay = kv.Value; }
+
+        // Below threshold pays nothing.
+        var r = SlotEvaluator.Evaluate(AnywhereGrid(def, sym, min - 1, 0), bet, def);
+        Expect($"{min - 1}x {sym} (below {min}) pays nothing", r.totalWin, 0);
+
+        // At threshold pays base * tier(min).
+        long wantMin = unit * Mathf.RoundToInt(basePay * def.AnywhereTierMult(min));
+        r = SlotEvaluator.Evaluate(AnywhereGrid(def, sym, min, 0), bet, def);
+        Expect($"{min}x {sym} pays base*{def.AnywhereTierMult(min)}", r.totalWin, wantMin);
+
+        // A higher tier scales up (10+ where present).
+        int high = 10;
+        long wantHigh = unit * Mathf.RoundToInt(basePay * def.AnywhereTierMult(high));
+        r = SlotEvaluator.Evaluate(AnywhereGrid(def, sym, high, 0), bet, def);
+        Expect($"{high}x {sym} pays base*{def.AnywhereTierMult(high)}", r.totalWin, wantHigh);
+
+        // Wild substitutes: (min-1) fruit + 1 wild reaches the threshold.
+        r = SlotEvaluator.Evaluate(AnywhereGrid(def, sym, min - 1, 1), bet, def);
+        Expect($"{min - 1}x {sym} + 1 wild pays like {min}x", r.totalWin, wantMin);
+
+        // Scatters still award free spins from anywhere.
+        var sg = new SymbolId[def.cols, def.rows];
+        for (int c = 0; c < def.cols; c++)
+            for (int row = 0; row < def.rows; row++)
+                sg[c, row] = c < def.scatterCountForFreeSpins && row == 0 ? def.scatterSymbol : SymbolId.Cherry;
+        r = SlotEvaluator.Evaluate(sg, bet, def);
+        if (!r.isFreeSpinsTriggered || r.freeSpinsAwarded != def.freeSpinsAwarded)
+            Fail($"{def.scatterCountForFreeSpins} scatters should award {def.freeSpinsAwarded} free spins");
+        else Pass($"scatters award {def.freeSpinsAwarded} free spins + {def.scatterBetMultiplier}x bet");
+    }
+
     static void CheckCatalog(SlotGameDef def)
     {
         var strip = def.reelStrip;
@@ -120,16 +189,19 @@ public static class SlotMathCheck
             if (Array.IndexOf(strip, kv.Key) < 0)
                 Fail($"{kv.Key} pays {kv.Value}x but never lands on the strip");
 
-        foreach (var w in def.winFavorTable)
-        {
-            if (w.symbol == def.wildSymbol)
-                Fail($"wild {w.symbol} is in the forced-win pool — that hands out the top award and bypasses the multiplier design");
-            if (Array.IndexOf(strip, w.symbol) < 0)
-                Fail($"forced-win symbol {w.symbol} is not on the strip");
-        }
+        if (def.winFavorTable != null)
+            foreach (var w in def.winFavorTable)
+            {
+                if (w.symbol == def.wildSymbol)
+                    Fail($"wild {w.symbol} is in the forced-win pool — that hands out the top award and bypasses the multiplier design");
+                if (Array.IndexOf(strip, w.symbol) < 0)
+                    Fail($"forced-win symbol {w.symbol} is not on the strip");
+            }
 
+        // framePath is optional (a machine may render on the velvet backdrop
+        // alone); background and card art are required.
         foreach (var path in new[] { def.backgroundPath, def.framePath, def.cardPath })
-            if (AssetDatabase.LoadAssetAtPath<Texture2D>(path) == null)
+            if (!string.IsNullOrEmpty(path) && AssetDatabase.LoadAssetAtPath<Texture2D>(path) == null)
                 Fail($"missing art: {path}");
 
         foreach (var kv in def.symbolArt)
@@ -151,35 +223,47 @@ public static class SlotMathCheck
             double wagered = 0, returned = 0;
             long hits = 0;
 
+            int len = def.reelStrip.Length;
             for (int i = 0; i < spins; i++)
             {
                 var grid = new SymbolId[def.cols, def.rows];
-                int len = def.reelStrip.Length;
                 for (int c = 0; c < def.cols; c++)
                 {
                     int center = rng.Next(0, len);
                     for (int row = 0; row < def.rows; row++)
                         grid[c, row] = def.reelStrip[(center + row - 1 + len) % len];
                 }
-                if (rng.NextDouble() < def.guaranteedWinChance)
+
+                long win;
+                if (def.payMode == PayMode.AnywhereCount)
                 {
-                    float total = 0f;
-                    foreach (var w in def.winFavorTable) total += w.weight;
-                    float roll = (float)rng.NextDouble() * total;
-                    var pick = def.winFavorTable[def.winFavorTable.Length - 1].symbol;
-                    foreach (var w in def.winFavorTable)
+                    // Same cascade code the live machine runs, so the RTP here is
+                    // the RTP players get.
+                    win = SlotCascade.Resolve(grid, bet, def, () => def.reelStrip[rng.Next(0, len)]).totalWin;
+                }
+                else
+                {
+                    if (def.winFavorTable != null && def.paylines != null &&
+                        rng.NextDouble() < def.guaranteedWinChance)
                     {
-                        roll -= w.weight;
-                        if (roll <= 0f) { pick = w.symbol; break; }
+                        float total = 0f;
+                        foreach (var w in def.winFavorTable) total += w.weight;
+                        float roll = (float)rng.NextDouble() * total;
+                        var pick = def.winFavorTable[def.winFavorTable.Length - 1].symbol;
+                        foreach (var w in def.winFavorTable)
+                        {
+                            roll -= w.weight;
+                            if (roll <= 0f) { pick = w.symbol; break; }
+                        }
+                        foreach (var coord in def.paylines[rng.Next(0, def.paylines.Length)])
+                            grid[coord.col, coord.row] = pick;
                     }
-                    foreach (var coord in def.paylines[rng.Next(0, def.paylines.Length)])
-                        grid[coord.col, coord.row] = pick;
+                    win = SlotEvaluator.Evaluate(grid, bet, def).totalWin;
                 }
 
-                var res = SlotEvaluator.Evaluate(grid, bet, def);
                 wagered += bet;
-                returned += res.totalWin;
-                if (res.totalWin > 0) hits++;
+                returned += win;
+                if (win > 0) hits++;
             }
 
             double rtp = returned / wagered * 100.0;

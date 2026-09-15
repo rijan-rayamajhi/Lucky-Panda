@@ -22,8 +22,33 @@ public enum SymbolId
     Bar1 = 12,      // Single BAR
     Bar2 = 13,      // Double BAR
     Bar3 = 14,      // Triple BAR
-    Panda = 15,     // Triple Diamond high symbol
-    AnyBar = 16     // Triple Diamond mixed-bar combo (result symbol only, never on a reel)
+    Panda = 15,     // Triple Diamond high symbol / Lucky Panda WILD
+    AnyBar = 16,    // Triple Diamond mixed-bar combo (result symbol only, never on a reel)
+
+    // Lucky Panda fruits (pay-anywhere). Art is currently mapped to reused
+    // placeholder symbols in SlotCatalog — swap symbolArt for real fruit art.
+    Cherry = 17,
+    Lemon = 18,
+    Orange = 19,
+    Plum = 20,
+    Grape = 21,
+    Watermelon = 22,
+    Pineapple = 23
+}
+
+/// How a machine scores a stopped grid. Paylines walks fixed coord lines;
+/// AnywhereCount pays any symbol that appears at least anywhereMinCount times
+/// anywhere in the grid, and drives the cascade loop.
+public enum PayMode { Paylines, AnywhereCount }
+
+/// Count tier for AnywhereCount pay: at `minCount` or more matching symbols the
+/// base payout is multiplied by `mult`. Tiers are stored highest-count first.
+[Serializable]
+public struct AnywherePayTier
+{
+    public int minCount;
+    public float mult;
+    public AnywherePayTier(int c, float m) { minCount = c; mult = m; }
 }
 
 [Serializable]
@@ -74,7 +99,8 @@ public struct WeightedSymbol
 public enum SlotGameId
 {
     Classic777 = 0,
-    TripleDiamond = 1
+    TripleDiamond = 1,
+    LuckyPanda = 2
 }
 
 /// Everything that makes one slot machine different from another. The machine,
@@ -94,6 +120,27 @@ public class SlotGameDef
     public long[] betLadder;
     public SymbolId[] reelStrip;
     public int PaylineCount => paylines.Length;
+
+    // ---- pay mode ------------------------------------------------------
+    public PayMode payMode = PayMode.Paylines;
+    /// AnywhereCount: fewest matching symbols anywhere in the grid that pays.
+    public int anywhereMinCount = 6;
+    /// AnywhereCount win unit: betUnit = totalBet / this. A 21-cell field with
+    /// ~20 usable positions makes 20 the natural analog of a 20-line game; it is
+    /// also the single global scale knob the balance sim tunes RTP with.
+    public int anywhereBetDivisor = 20;
+    /// AnywhereCount count tiers (highest count first): base payout * mult.
+    public AnywherePayTier[] anywherePayTiers;
+
+    // ---- cascade -------------------------------------------------------
+    /// Chain multiplier per cascade depth; ladder[0] MUST be 1 (the first,
+    /// un-cascaded evaluation). Later depths clamp to the last entry.
+    public int[] cascadeMultiplierLadder;
+    /// Hard cap on cascade depth — the guard against a chain that never settles.
+    public int maxCascades = 12;
+    /// False hides the progressive jackpot ticker row (a 3-reel convention) and
+    /// frees that strip for the cascade multiplier display.
+    public bool showJackpotRow = true;
 
     // ---- paytable ------------------------------------------------------
     public Dictionary<SymbolId, int> payouts;
@@ -143,6 +190,24 @@ public class SlotGameDef
 
     public int PayoutFor(SymbolId s) =>
         payouts != null && payouts.TryGetValue(s, out var m) ? m : 0;
+
+    /// Tier multiplier for `count` matching symbols; 0 when below the smallest
+    /// tier (i.e. below anywhereMinCount).
+    public float AnywhereTierMult(int count)
+    {
+        if (anywherePayTiers == null) return 1f;
+        for (int i = 0; i < anywherePayTiers.Length; i++)
+            if (count >= anywherePayTiers[i].minCount) return anywherePayTiers[i].mult;
+        return 0f;
+    }
+
+    /// Chain multiplier at cascade depth `step` (0 = first evaluation).
+    public int CascadeMult(int step)
+    {
+        if (cascadeMultiplierLadder == null || cascadeMultiplierLadder.Length == 0) return 1;
+        int i = step < 0 ? 0 : (step >= cascadeMultiplierLadder.Length ? cascadeMultiplierLadder.Length - 1 : step);
+        return cascadeMultiplierLadder[i];
+    }
 
     public bool IsAnyComboMember(SymbolId s)
     {
@@ -350,7 +415,114 @@ public static class SlotCatalog
         dividerHeight = 320f,
     };
 
-    public static readonly SlotGameDef[] All = { Classic777, TripleDiamond };
+    // Lucky Panda: Fruit Fortune — a wide 7x3 pay-anywhere cascade machine.
+    // PLACEHOLDER ART: background/card reuse Triple Diamond art, the frame
+    // overlay is omitted (no wide-window frame exists yet), and each fruit maps
+    // to an existing distinct symbol sprite. Replace backgroundPath, cardPath,
+    // framePath and symbolArt with real Fruit Fortune art, then Build Everything.
+    public static readonly SlotGameDef LuckyPanda = new SlotGameDef
+    {
+        id = SlotGameId.LuckyPanda,
+        displayName = "LUCKY PANDA",
+        sceneName = "LuckyPanda",
+
+        cols = 7,
+        rows = 3,
+        paylines = null,            // pay-anywhere: no lines
+        betLadder = StandardBetLadder,
+
+        payMode = PayMode.AnywhereCount,
+        anywhereMinCount = 6,
+        anywhereBetDivisor = 8,   // tuned by Verify Slot Math to ~815% return
+        // 6-7 small, 8-9 medium, 10+ large. Tuned globally via anywhereBetDivisor.
+        anywherePayTiers = new[]
+        {
+            new AnywherePayTier(10, 3.0f),
+            new AnywherePayTier(8,  1.6f),
+            new AnywherePayTier(6,  1.0f),
+        },
+        cascadeMultiplierLadder = new[] { 1, 2, 3, 5, 10 },
+        maxCascades = 12,
+        showJackpotRow = false,
+
+        // Base payout per fruit at the 6+ tier. Common fruits pay little; rare
+        // ones pay more. The balance sim (Verify Slot Math) tunes RTP.
+        payouts = new Dictionary<SymbolId, int>
+        {
+            { SymbolId.Pineapple,  30 },
+            { SymbolId.Watermelon, 20 },
+            { SymbolId.Grape,      12 },
+            { SymbolId.Plum,        8 },
+            { SymbolId.Orange,      6 },
+            { SymbolId.Lemon,       5 },
+            { SymbolId.Cherry,      5 },
+        },
+
+        wildSymbol = SymbolId.Panda,   // substitutes for any fruit
+        wildLineMultiplier = 1,
+        anyComboMultiplier = 0,
+
+        scatterSymbol = SymbolId.Scatter,
+        scatterCountForFreeSpins = 3,
+        freeSpinsAwarded = 10,
+        scatterBetMultiplier = 5,
+        freeSpinWinMultiplier = 2,
+
+        guaranteedWinChance = 0f,      // cascades + wild make natural wins frequent
+        winFavorTable = null,
+
+        // 30 stops, no adjacent duplicates. Higher-paying fruits are rarer;
+        // Panda (wild) and Scatter are the rarest.
+        reelStrip = new[]
+        {
+            SymbolId.Cherry, SymbolId.Lemon, SymbolId.Orange, SymbolId.Cherry, SymbolId.Grape,
+            SymbolId.Lemon, SymbolId.Plum, SymbolId.Cherry, SymbolId.Orange, SymbolId.Watermelon,
+            SymbolId.Lemon, SymbolId.Grape, SymbolId.Cherry, SymbolId.Panda, SymbolId.Orange,
+            SymbolId.Plum, SymbolId.Lemon, SymbolId.Pineapple, SymbolId.Cherry, SymbolId.Grape,
+            SymbolId.Orange, SymbolId.Lemon, SymbolId.Plum, SymbolId.Scatter, SymbolId.Cherry,
+            SymbolId.Watermelon, SymbolId.Orange, SymbolId.Lemon, SymbolId.Grape, SymbolId.Plum
+        },
+
+        backgroundPath = BG + "Bg_FruitFortune.png",
+        framePath = UI + "Frame_FruitFortune.png",
+        cardPath = UI + "Card_FruitFortune.png",
+        cardHasBakedFrame = false,
+        symbolArt = new Dictionary<SymbolId, string>
+        {
+            { SymbolId.Cherry,     Sym + "Sym_Cherry.png" },
+            { SymbolId.Lemon,      Sym + "Sym_Lemon.png" },
+            { SymbolId.Orange,     Sym + "Sym_Orange.png" },
+            { SymbolId.Plum,       Sym + "Sym_Plum.png" },
+            { SymbolId.Grape,      Sym + "Sym_Grapes.png" },
+            { SymbolId.Watermelon, Sym + "Sym_Watermelon.png" },
+            { SymbolId.Pineapple,  Sym + "Sym_Pineapple.png" },
+            { SymbolId.Panda,      Sym + "Sym_PandaWild.png" },
+            { SymbolId.Scatter,    Sym + "Sym_Scatter.png" },  // reused bonus orb
+        },
+
+        // Frame_FruitFortune is 1561x1008; its transparent opening (flood-filled)
+        // is 79.4% W x 52.7% H, centred 57px (image space) below the frame centre
+        // — taller at the sides than the crest-notched middle. At a 1240x800
+        // cabinet that is a ~984x422 opening centred at y=-46. The velvet backdrop
+        // is sized past it (1020x450) so it fills to the gold border with no scene
+        // showing through top/bottom; the frame overlay hides the overhang.
+        cabinetSize = new Vector2(1240, 800),
+        backdropSize = new Vector2(1020, 450),
+        reelWindowSize = new Vector2(986, 392),
+        reelWindowY = -46f,
+        // Grid fills the 986x392 window with even margins: column pitch 138 puts
+        // the outer symbols at +/-414 (edge +/-474, ~19px clear of the 493-half
+        // window); row pitch 128 gives ~8px top/bottom. Verified against the
+        // frame art with a composite render, so symbols fill without kissing the
+        // gold border.
+        colWidth = 130f,
+        colSpacing = 8f,
+        rowHeight = 128f,
+        symbolSize = new Vector2(120, 120),
+        dividerHeight = 372f,
+    };
+
+    public static readonly SlotGameDef[] All = { Classic777, TripleDiamond, LuckyPanda };
 
     public static SlotGameDef Get(SlotGameId id)
     {

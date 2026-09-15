@@ -202,13 +202,18 @@ public static class LobbyBuilder
             {
                 // Frame_SlotGame's gold line sits inside its own image — 25px of
                 // 1066 at the sides, 41/39 of 1408 top/bottom — so art stretched
-                // to the same rect spills out past the border. Inset it to the
-                // frame's window instead.
-                var artRT = art.rectTransform;
-                artRT.anchorMin = Vector2.zero;
-                artRT.anchorMax = Vector2.one;
-                artRT.offsetMin = new Vector2(cardSize.x * (25f / 1066f), cardSize.y * (39f / 1408f));
-                artRT.offsetMax = new Vector2(-cardSize.x * (25f / 1066f), -cardSize.y * (41f / 1408f));
+                // to the same rect spills out past the border. Inset the art to
+                // the frame's window AND clip it there with a mask, so bright,
+                // full-bleed card art can't fringe a pixel past the gold border.
+                var window = Panel(tile, "ArtWindow");
+                window.anchorMin = Vector2.zero;
+                window.anchorMax = Vector2.one;
+                window.offsetMin = new Vector2(cardSize.x * (25f / 1066f), cardSize.y * (39f / 1408f));
+                window.offsetMax = new Vector2(-cardSize.x * (25f / 1066f), -cardSize.y * (41f / 1408f));
+                window.gameObject.AddComponent<RectMask2D>();
+
+                art.transform.SetParent(window, false);
+                Stretch(art.rectTransform);
 
                 var tileFrame = Img(tile, "FrameOverlay", ArtUI + "Frame_SlotGame.png");
                 tileFrame.preserveAspect = false;

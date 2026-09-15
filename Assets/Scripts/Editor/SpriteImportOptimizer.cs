@@ -16,6 +16,7 @@ public static class SpriteImportOptimizer
         { "BG_Lobby",           2048 },
         { "Bg_Slot777",         2048 },
         { "Bg_TripleDiamond",   2048 },
+        { "Bg_FruitFortune",    2048 },
         // Large panels; 512 visibly softens their painted detail.
         { "Panel_Popup",       1024 },
         { "Panel_Popup2",      1024 },
@@ -26,9 +27,11 @@ public static class SpriteImportOptimizer
         // Slot cabinets, drawn 920px wide with fine filigree.
         { "Frame_Classic777",     1024 },
         { "Frame_TripleDiamond",  1024 },
+        { "Frame_FruitFortune",   1024 },
         // Lobby tiles and their shared border, drawn ~320px wide.
         { "Card_Slot777",          512 },
         { "Card_TripleDiamond",    512 },
+        { "Card_FruitFortune",     512 },
         { "Frame_SlotGame",        512 },
         // Mid-size stretched chrome.
         { "Pill_Currency",      512 },

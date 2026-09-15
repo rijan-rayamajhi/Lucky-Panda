@@ -36,6 +36,11 @@ public class SlotUI : MonoBehaviour
     public GameObject freeSpinsBanner;
     public TMP_Text freeSpinsCountText;
 
+    [Header("Cascade Multiplier")]
+    // Occupies the strip freed by hiding the jackpot row on cascade machines.
+    public GameObject chainMultiplierRoot;
+    public TMP_Text chainMultiplierText;
+
     [Header("Coin Gain Effect")]
     public Sprite coinIcon;
     const int FlyingCoinCount = 8;
@@ -272,6 +277,29 @@ public class SlotUI : MonoBehaviour
         {
             freeSpinsBanner.SetActive(true);
             UpdateFreeSpins(totalSpins);
+        }
+    }
+
+    // Cascade chain multiplier, shown where the jackpot row would be. A ×1 step
+    // is the un-cascaded base, so it reads dimmer than the rising chain.
+    public void ShowChainMultiplier(int mult)
+    {
+        if (chainMultiplierRoot) chainMultiplierRoot.SetActive(true);
+        if (chainMultiplierText)
+        {
+            chainMultiplierText.text = "x" + mult;
+            chainMultiplierText.color = mult > 1
+                ? new Color(1f, 0.85f, 0.2f, 1f)
+                : new Color(0.7f, 0.7f, 0.7f, 0.9f);
+        }
+    }
+
+    public void HideChainMultiplier()
+    {
+        if (chainMultiplierText)
+        {
+            chainMultiplierText.text = "x1";
+            chainMultiplierText.color = new Color(0.7f, 0.7f, 0.7f, 0.9f);
         }
     }
 

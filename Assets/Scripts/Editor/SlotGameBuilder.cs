@@ -33,6 +33,12 @@ public static class SlotGameBuilder
         EditorSceneManager.OpenScene(SlotCatalog.TripleDiamond.ScenePath);
     }
 
+    [MenuItem("Lucky Panda/Open Scene/Lucky Panda")]
+    public static void OpenLuckyPandaScene()
+    {
+        EditorSceneManager.OpenScene(SlotCatalog.LuckyPanda.ScenePath);
+    }
+
     /// The one build command: fix up the art imports once, then regenerate the
     /// lobby and every machine. Rebuilding one scene at a time invited the two
     /// halves to drift apart.
@@ -113,19 +119,44 @@ public static class SlotGameBuilder
         var coinText = CurrencyPill(hud, "CoinPill", ArtUI + "Icon_Coin.png", "1,000,000",
             new Vector2(510, 0), new Vector2(380, 84), GoldBright);
 
-        // 5. Jackpot Tickers (Row below HUD - 920px container matching the slot cabinet width)
-        var jackpots = Panel(safe, "JackpotHeader");
-        Place(jackpots, new Vector2(0.5f, 1f), new Vector2(0, -96), new Vector2(920, 62));
-        var jpLayout = jackpots.gameObject.AddComponent<HorizontalLayoutGroup>();
-        jpLayout.childAlignment = TextAnchor.MiddleCenter;
-        jpLayout.spacing = 8;
-        jpLayout.childForceExpandWidth = false;
-        jpLayout.childForceExpandHeight = false;
+        // 5. Header strip below the HUD (920px, matching the cabinet width).
+        // Payline machines show the four progressive jackpot tickers here;
+        // cascade machines hide those (a 3-reel convention) and use the strip
+        // for the chain multiplier instead.
+        TMP_Text grandText = null, majorText = null, minorText = null, miniText = null;
+        GameObject chainRoot = null;
+        TMP_Text chainText = null;
 
-        var grandText = JackpotPlate(jackpots, "GRAND", ArtUI + "Bar_Grand.png", "1,250,000");
-        var majorText = JackpotPlate(jackpots, "MAJOR", ArtUI + "Bar_Major.png", "285,000");
-        var minorText = JackpotPlate(jackpots, "MINOR", ArtUI + "Bar_Minor.png", "65,000");
-        var miniText  = JackpotPlate(jackpots, "MINI",  ArtUI + "Bar_Mini.png",  "14,500");
+        if (def.showJackpotRow)
+        {
+            var jackpots = Panel(safe, "JackpotHeader");
+            Place(jackpots, new Vector2(0.5f, 1f), new Vector2(0, -96), new Vector2(920, 62));
+            var jpLayout = jackpots.gameObject.AddComponent<HorizontalLayoutGroup>();
+            jpLayout.childAlignment = TextAnchor.MiddleCenter;
+            jpLayout.spacing = 8;
+            jpLayout.childForceExpandWidth = false;
+            jpLayout.childForceExpandHeight = false;
+
+            grandText = JackpotPlate(jackpots, "GRAND", ArtUI + "Bar_Grand.png", "1,250,000");
+            majorText = JackpotPlate(jackpots, "MAJOR", ArtUI + "Bar_Major.png", "285,000");
+            minorText = JackpotPlate(jackpots, "MINOR", ArtUI + "Bar_Minor.png", "65,000");
+            miniText  = JackpotPlate(jackpots, "MINI",  ArtUI + "Bar_Mini.png",  "14,500");
+        }
+        else
+        {
+            var multStrip = Frame(safe, "ChainMultiplierStrip", 22f, 5f, GoldBright, PillTop, PillBottom);
+            Place(multStrip.rectTransform, new Vector2(0.5f, 1f), new Vector2(0, -96), new Vector2(360, 62));
+            var multTitle = Label(multStrip.transform, "Title", "MULTIPLIER");
+            multTitle.fontSize = 15;
+            multTitle.color = new Color(1f, 0.85f, 0.4f, 0.85f);
+            Place(multTitle.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(-88, 0), new Vector2(150, 40));
+            var multValue = Label(multStrip.transform, "Value", "x1");
+            multValue.fontSize = 34;
+            multValue.color = new Color(0.7f, 0.7f, 0.7f, 0.9f);
+            Place(multValue.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(80, 0), new Vector2(150, 48));
+            chainRoot = multStrip.gameObject;
+            chainText = multValue;
+        }
 
         // 6. Slot Cabinet & Reel Matrix (Center). Every number below comes from
         // the game def, measured from that game's frame art's inner window.
@@ -184,10 +215,14 @@ public static class SlotGameBuilder
         }
 
         // Ornate frame overlay sitting on top of the reels. Its centre is
-        // transparent, which is what the reels show through.
-        var frameImg = Img(cabinet, "FrameOverlay", def.framePath);
-        frameImg.preserveAspect = true;
-        Stretch(frameImg.rectTransform);
+        // transparent, which is what the reels show through. Machines without a
+        // frame (no matching window art yet) show the velvet backdrop alone.
+        if (!string.IsNullOrEmpty(def.framePath))
+        {
+            var frameImg = Img(cabinet, "FrameOverlay", def.framePath);
+            frameImg.preserveAspect = true;
+            Stretch(frameImg.rectTransform);
+        }
 
         // 7. Bottom Control Deck
         var deck = Panel(safe, "BottomDeck");
@@ -322,6 +357,8 @@ public static class SlotGameBuilder
         ui.winAmountText = winAmountText;
         ui.freeSpinsBanner = fsBanner.gameObject;
         ui.freeSpinsCountText = fsText;
+        ui.chainMultiplierRoot = chainRoot;
+        ui.chainMultiplierText = chainText;
 
         // Explicit direct event wiring in builder for fail-safe runtime operation
         backBtn.onClick.AddListener(ui.OnBackToLobbyClicked);

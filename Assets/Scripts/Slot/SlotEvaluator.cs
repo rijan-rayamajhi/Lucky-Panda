@@ -3,11 +3,11 @@ using UnityEngine;
 
 public static class SlotEvaluator
 {
-    public static SpinEvaluationResult Evaluate(SymbolId[,] grid, long totalBet, SlotGameDef def)
+    /// includeScatter is false on cascade steps after the first, so a scatter
+    /// left on the grid by a collapse can't re-trigger free spins every step.
+    public static SpinEvaluationResult Evaluate(SymbolId[,] grid, long totalBet, SlotGameDef def,
+                                                bool includeScatter = true)
     {
-        long lineBet = totalBet / def.PaylineCount;
-        if (lineBet <= 0) lineBet = 1;
-
         var result = new SpinEvaluationResult
         {
             winningLines = new List<WinLineResult>(),
@@ -16,7 +16,105 @@ public static class SlotEvaluator
             freeSpinsAwarded = 0
         };
 
-        // 1. Paylines
+        if (def.payMode == PayMode.AnywhereCount)
+            EvaluateAnywhere(grid, totalBet, def, ref result);
+        else
+            EvaluatePaylines(grid, totalBet, def, ref result);
+
+        // Scatters (free spins bonus) — pay from anywhere in either mode.
+        if (includeScatter)
+        {
+            int scatterCount = 0;
+            for (int c = 0; c < def.cols; c++)
+                for (int r = 0; r < def.rows; r++)
+                    if (grid[c, r] == def.scatterSymbol) scatterCount++;
+
+            if (scatterCount >= def.scatterCountForFreeSpins)
+            {
+                result.isFreeSpinsTriggered = true;
+                result.freeSpinsAwarded = def.freeSpinsAwarded;
+                result.totalWin += totalBet * def.scatterBetMultiplier;
+            }
+        }
+
+        // Celebration tier
+        result.totalMultiplier = (float)result.totalWin / Mathf.Max(1, totalBet);
+        if (result.totalMultiplier >= 50f)
+            result.tier = WinCelebrationTier.EpicWin;
+        else if (result.totalMultiplier >= 25f)
+            result.tier = WinCelebrationTier.MegaWin;
+        else if (result.totalMultiplier >= 10f)
+            result.tier = WinCelebrationTier.BigWin;
+        else if (result.totalWin > 0)
+            result.tier = WinCelebrationTier.Normal;
+        else
+            result.tier = WinCelebrationTier.None;
+
+        return result;
+    }
+
+    /// Pay any symbol appearing anywhereMinCount+ times anywhere in the grid.
+    /// The wild (Panda) substitutes for every present fruit, so it counts toward
+    /// each winning fruit's total. Wilds are rare, so the modest over-count this
+    /// creates is folded into the sim-tuned RTP.
+    // ponytail: wild shared across fruits (naive), single-symbol-owns-wild if it ever inflates
+    static void EvaluateAnywhere(SymbolId[,] grid, long totalBet, SlotGameDef def, ref SpinEvaluationResult result)
+    {
+        long betUnit = totalBet / Mathf.Max(1, def.anywhereBetDivisor);
+        if (betUnit <= 0) betUnit = 1;
+
+        var counts = new Dictionary<SymbolId, List<PaylineCoord>>();
+        var wildCoords = new List<PaylineCoord>();
+
+        for (int c = 0; c < def.cols; c++)
+        {
+            for (int r = 0; r < def.rows; r++)
+            {
+                var s = grid[c, r];
+                if (s == def.scatterSymbol) continue;
+                if (s == def.wildSymbol) { wildCoords.Add(new PaylineCoord(c, r)); continue; }
+                if (!counts.TryGetValue(s, out var list)) { list = new List<PaylineCoord>(); counts[s] = list; }
+                list.Add(new PaylineCoord(c, r));
+            }
+        }
+
+        foreach (var kv in counts)
+        {
+            var sym = kv.Key;
+            int basePay = def.PayoutFor(sym);
+            if (basePay <= 0) continue;                 // not a paying symbol
+
+            int effCount = kv.Value.Count + wildCoords.Count;
+            if (effCount < def.anywhereMinCount) continue;
+
+            float tier = def.AnywhereTierMult(effCount);
+            if (tier <= 0f) continue;
+
+            int credits = Mathf.RoundToInt(basePay * tier);
+            long win = betUnit * credits;
+
+            // Winning cells include the wilds, so the cascade bursts them too.
+            var cells = new List<PaylineCoord>(kv.Value);
+            cells.AddRange(wildCoords);
+
+            result.winningLines.Add(new WinLineResult
+            {
+                lineIndex = -1,
+                symbol = sym,
+                multiplier = credits,
+                winAmount = win,
+                coords = cells.ToArray(),
+                wildMultiplier = 1
+            });
+            result.totalWin += win;
+        }
+    }
+
+    static void EvaluatePaylines(SymbolId[,] grid, long totalBet, SlotGameDef def, ref SpinEvaluationResult result)
+    {
+        long lineBet = totalBet / def.PaylineCount;
+        if (lineBet <= 0) lineBet = 1;
+
         for (int lineIdx = 0; lineIdx < def.paylines.Length; lineIdx++)
         {
             var coords = def.paylines[lineIdx];
@@ -68,39 +166,6 @@ public static class SlotEvaluator
                 result.totalWin += lineWin;
             }
         }
-
-        // 2. Scatters (free spins bonus)
-        int scatterCount = 0;
-        for (int c = 0; c < def.cols; c++)
-        {
-            for (int r = 0; r < def.rows; r++)
-            {
-                if (grid[c, r] == def.scatterSymbol)
-                    scatterCount++;
-            }
-        }
-
-        if (scatterCount >= def.scatterCountForFreeSpins)
-        {
-            result.isFreeSpinsTriggered = true;
-            result.freeSpinsAwarded = def.freeSpinsAwarded;
-            result.totalWin += totalBet * def.scatterBetMultiplier;
-        }
-
-        // 3. Celebration tier
-        result.totalMultiplier = (float)result.totalWin / Mathf.Max(1, totalBet);
-        if (result.totalMultiplier >= 50f)
-            result.tier = WinCelebrationTier.EpicWin;
-        else if (result.totalMultiplier >= 25f)
-            result.tier = WinCelebrationTier.MegaWin;
-        else if (result.totalMultiplier >= 10f)
-            result.tier = WinCelebrationTier.BigWin;
-        else if (result.totalWin > 0)
-            result.tier = WinCelebrationTier.Normal;
-        else
-            result.tier = WinCelebrationTier.None;
-
-        return result;
     }
 
     static int CountWilds(SlotGameDef def, SymbolId a, SymbolId b, SymbolId c)

@@ -147,14 +147,16 @@ public class SlotMachine : MonoBehaviour
         reelsStoppedCount = 0;
         ui.SetSpinButtonInteractable(false);
 
-        // Determine final outcome
+        // Determine final outcome. Cascade games resolve after the reels stop
+        // (the chain runs on the shown grid), so only payline games pre-evaluate.
         finalOutcome = GenerateOutcome();
-        lastEvaluation = SlotEvaluator.Evaluate(finalOutcome, bet, Def);
-
-        // Free spins pay a multiple of the normal win.
-        if (IsFreeSpinsActive && Def.freeSpinWinMultiplier > 1)
+        if (Def.payMode == PayMode.Paylines)
         {
-            lastEvaluation.totalWin *= Def.freeSpinWinMultiplier;
+            lastEvaluation = SlotEvaluator.Evaluate(finalOutcome, bet, Def);
+
+            // Free spins pay a multiple of the normal win.
+            if (IsFreeSpinsActive && Def.freeSpinWinMultiplier > 1)
+                lastEvaluation.totalWin *= Def.freeSpinWinMultiplier;
         }
 
         // Start spinning all reels
@@ -182,7 +184,10 @@ public class SlotMachine : MonoBehaviour
             yield return null;
 
         // Evaluate and present wins
-        yield return StartCoroutine(PresentWinsRoutine(bet));
+        if (Def.payMode == PayMode.AnywhereCount)
+            yield return StartCoroutine(PresentCascadeRoutine(bet));
+        else
+            yield return StartCoroutine(PresentWinsRoutine(bet));
     }
 
     void OnReelFinished(int colIdx)
@@ -194,23 +199,67 @@ public class SlotMachine : MonoBehaviour
     IEnumerator PresentWinsRoutine(long bet)
     {
         State = SlotState.Evaluating;
+        if (lastEvaluation.totalWin > 0)
+            HighlightWinningPaylines();
+        yield return StartCoroutine(FinishSpin(bet, lastEvaluation.totalWin, lastEvaluation.tier,
+            lastEvaluation.isFreeSpinsTriggered, lastEvaluation.freeSpinsAwarded));
+    }
 
-        // Record spin to GameState and quests
+    // Pay-anywhere cascade: resolve the whole chain up front (deterministic —
+    // the refills we show are exactly the ones scored), then play it back step
+    // by step, bursting winners, dropping the resolved refills and raising the
+    // chain multiplier, before crediting the accumulated win.
+    IEnumerator PresentCascadeRoutine(long bet)
+    {
+        State = SlotState.Evaluating;
+
+        var strip = Def.reelStrip;
+        int len = strip.Length;
+        var cascade = SlotCascade.Resolve(finalOutcome, bet, Def,
+            () => strip[UnityEngine.Random.Range(0, len)]);
+
+        long totalWin = cascade.totalWin;
+        if (IsFreeSpinsActive && Def.freeSpinWinMultiplier > 1)
+            totalWin *= Def.freeSpinWinMultiplier;
+
+        long running = 0;
+        for (int i = 0; i < cascade.steps.Count; i++)
+        {
+            var s = cascade.steps[i];
+            ui.ShowChainMultiplier(s.chainMultiplier);
+            HighlightAnywhereWins(s.eval);
+            running += s.stepWin;
+            ui.ShowWinAmount(running);
+            AudioManager.PlayClick();
+            yield return new WaitForSeconds(0.55f);
+
+            yield return StartCoroutine(CollapseColumns(s.cleared, s.resultGrid));
+            ResetSymbolHighlights();
+        }
+        ui.HideChainMultiplier();
+
+        yield return StartCoroutine(FinishSpin(bet, totalWin, cascade.tier,
+            cascade.freeSpinsTriggered, cascade.freeSpinsAwarded));
+    }
+
+    // Credit the win, roll balances, fire free-spins/celebration, then release
+    // the machine and continue auto/free spins. Shared by both pay modes.
+    IEnumerator FinishSpin(long bet, long totalWin, WinCelebrationTier tier,
+                           bool freeSpinsTriggered, int freeSpinsAwarded)
+    {
         var state = GameState.I;
         long prevCoins = state != null ? state.Data.coins : 0;
         bool won = false;
         if (state != null)
         {
-            state.RecordSpin(bet, lastEvaluation.totalWin);
-            if (lastEvaluation.totalWin > 0)
+            state.RecordSpin(bet, totalWin);
+            if (totalWin > 0)
             {
-                state.AddCoins(lastEvaluation.totalWin, RewardSource.Win);
+                state.AddCoins(totalWin, RewardSource.Win);
                 won = true;
             }
         }
 
-        // A win animates the coin balance counting up with flying coins;
-        // anything else (no win, or no GameState) just snaps both balances.
         if (won)
         {
             ui.RefreshGemsOnly();
@@ -221,27 +270,22 @@ public class SlotMachine : MonoBehaviour
             ui.RefreshBalances();
         }
 
-        // Check Free Spins trigger
-        if (lastEvaluation.isFreeSpinsTriggered)
+        if (freeSpinsTriggered)
         {
-            FreeSpinsRemaining += lastEvaluation.freeSpinsAwarded;
+            FreeSpinsRemaining += freeSpinsAwarded;
             ui.ShowFreeSpinsBanner(FreeSpinsRemaining);
             yield return new WaitForSeconds(1.5f);
         }
 
-        if (lastEvaluation.totalWin > 0)
+        if (totalWin > 0)
         {
-            ui.ShowWinAmount(lastEvaluation.totalWin);
+            ui.ShowWinAmount(totalWin);
 
-            // Highlight winning symbols
-            HighlightWinningPaylines();
-
-            // Big win celebration popup if high multiplier
-            if (lastEvaluation.tier >= WinCelebrationTier.BigWin && winPopup != null)
+            if (tier >= WinCelebrationTier.BigWin && winPopup != null)
             {
                 State = SlotState.Celebrating;
                 bool popupDone = false;
-                winPopup.Show(lastEvaluation.tier, lastEvaluation.totalWin, () => popupDone = true);
+                winPopup.Show(tier, totalWin, () => popupDone = true);
                 while (!popupDone) yield return null;
             }
             else
@@ -257,7 +301,6 @@ public class SlotMachine : MonoBehaviour
         State = SlotState.Idle;
         ui.SetSpinButtonInteractable(true);
 
-        // Continue Auto Spin or Free Spins
         if (IsFreeSpinsActive)
         {
             yield return new WaitForSeconds(0.5f);
@@ -268,6 +311,45 @@ public class SlotMachine : MonoBehaviour
             yield return new WaitForSeconds(0.6f);
             if (IsAutoSpin) TrySpin();
         }
+    }
+
+    // Burst every column's cleared cells and settle to the resolved grid in
+    // parallel, then wait for the slowest column.
+    IEnumerator CollapseColumns(bool[,] cleared, SymbolId[,] resultGrid)
+    {
+        int running = 0;
+        for (int c = 0; c < Def.cols && c < reels.Length; c++)
+        {
+            var clearedCol = new bool[Def.rows];
+            var finalCol = new SymbolId[Def.rows];
+            for (int r = 0; r < Def.rows; r++)
+            {
+                clearedCol[r] = cleared[c, r];
+                finalCol[r] = resultGrid[c, r];
+            }
+            running++;
+            StartCoroutine(RunColumnCollapse(reels[c], clearedCol, finalCol, () => running--));
+        }
+        while (running > 0) yield return null;
+    }
+
+    IEnumerator RunColumnCollapse(ReelColumn reel, bool[] cleared, SymbolId[] finalCol, Action done)
+    {
+        yield return reel.BurstAndRefill(cleared, finalCol);
+        done();
+    }
+
+    void HighlightAnywhereWins(SpinEvaluationResult eval)
+    {
+        for (int c = 0; c < Def.cols && c < reels.Length; c++)
+            for (int r = 0; r < Def.rows; r++)
+                reels[c].HighlightSymbol(r, false);
+
+        var gold = new Color(1f, 0.85f, 0.2f, 1f);
+        foreach (var win in eval.winningLines)
+            foreach (var cd in win.coords)
+                if (cd.col < reels.Length)
+                    reels[cd.col].HighlightSymbol(cd.row, true, gold);
     }
 
     static readonly Color[] PaylineColors = new[]
@@ -326,8 +408,10 @@ public class SlotMachine : MonoBehaviour
         }
 
         // Nudge a share of spins into a guaranteed line win so the game stays
-        // lively. The pool excludes top-award symbols on purpose.
-        if (UnityEngine.Random.value < Def.guaranteedWinChance)
+        // lively. The pool excludes top-award symbols on purpose. Pay-anywhere
+        // games have no lines to force and lean on cascades instead.
+        if (Def.payMode == PayMode.Paylines && Def.paylines != null &&
+            UnityEngine.Random.value < Def.guaranteedWinChance)
         {
             int winLine = UnityEngine.Random.Range(0, Def.paylines.Length);
             var winSym = PickFavoredSymbol();

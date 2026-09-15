@@ -134,6 +134,50 @@ public class ReelColumn : MonoBehaviour
         SetSymbol(0, RandomStripSymbol());
     }
 
+    /// Cascade collapse for this column: burst the flagged cells, then settle
+    /// every row to `finalColumn` (top-to-bottom, as SlotCascade computed it)
+    /// with a short drop. The final state must equal finalColumn — the pops and
+    /// slide are cosmetic; correctness is that the grid matches the resolver.
+    public IEnumerator BurstAndRefill(bool[] clearedRows, SymbolId[] finalColumn)
+    {
+        // Burst the winning cells.
+        for (int r = 0; r < rows && r < clearedRows.Length; r++)
+            if (clearedRows[r] && symbolImages != null && r < symbolImages.Length && symbolImages[r] != null)
+                StartCoroutine(BurstOne(symbolImages[r].transform));
+        yield return new WaitForSeconds(0.16f);
+
+        // Drop in the resolved symbols.
+        for (int r = 0; r < rows && r < finalColumn.Length; r++)
+            SetSymbol(r, finalColumn[r]);
+
+        // Short settle so the refill reads as falling, not snapping.
+        Vector3 basePos = container.anchoredPosition;
+        float elapsed = 0f;
+        while (elapsed < 0.16f)
+        {
+            elapsed += Time.deltaTime;
+            float t = elapsed / 0.16f;
+            float drop = Mathf.Lerp(symbolHeight * 0.35f, 0f, t);
+            container.anchoredPosition = basePos + new Vector3(0, drop, 0);
+            yield return null;
+        }
+        container.anchoredPosition = basePos;
+    }
+
+    IEnumerator BurstOne(Transform tr)
+    {
+        Vector3 start = Vector3.one;
+        float elapsed = 0f;
+        while (elapsed < 0.16f)
+        {
+            elapsed += Time.deltaTime;
+            float t = elapsed / 0.16f;
+            tr.localScale = Vector3.Lerp(start, new Vector3(1.25f, 1.25f, 1f) * 0.01f, t);
+            yield return null;
+        }
+        tr.localScale = Vector3.one; // reset; SetSymbol will overwrite the sprite
+    }
+
     public void HighlightSymbol(int row, bool highlight, Color? highlightColor = null)
     {
         if (row >= 0 && row < symbolImages.Length && symbolImages[row] != null)
