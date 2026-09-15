@@ -30,6 +30,9 @@ public static class UIFactory
     public static readonly Color BarBottom = new Color(0.96f, 0.64f, 0.16f, 1f);
     public static readonly Color GreenTop = new Color(0.16f, 0.42f, 0.12f, 1f);
     public static readonly Color GreenBottom = new Color(0.08f, 0.24f, 0.07f, 1f);
+    public static readonly Color GemBlue = new Color(0.45f, 0.85f, 1f, 1f);
+    public static readonly Color PillFillTop = new Color(0.12f, 0.09f, 0.16f, 0.96f);
+    public static readonly Color PillFillBottom = new Color(0.05f, 0.03f, 0.08f, 0.96f);
     public static readonly Color Dim = new Color(0.35f, 0.30f, 0.45f, 1f);
 
     /// childControlWidth/Height default to FALSE on a freshly added layout
@@ -371,4 +374,44 @@ public static class UIFactory
         rt.anchoredPosition = pos;
         rt.sizeDelta = size;
     }
+
+    /// Painted 9-sliced procedural pill plate matching the Lobby standard;
+    /// the 3D currency icon hangs off the left cap with drop shadows so it
+    /// reads as sitting proudly above the plate rather than cramped inside it.
+    public static TMP_Text CurrencyPill(Transform parent, string name, Sprite iconSprite, string value,
+        Vector2 anchor, Vector2 pos, Vector2 size, Color rimColor)
+    {
+        var rim = Frame(parent, name, size.y * 0.5f, 10f, rimColor, PillFillTop, PillFillBottom);
+        Place(rim.rectTransform, anchor, pos, size);
+
+        var text = Label(rim.transform, "Value", value);
+        var rt = text.rectTransform;
+        rt.anchorMin = Vector2.zero;
+        rt.anchorMax = Vector2.one;
+        rt.offsetMin = new Vector2(size.y + 12f, 0f);
+        rt.offsetMax = new Vector2(-size.y * 0.42f, 0f);
+        text.alignment = TextAlignmentOptions.Midline;
+        text.enableAutoSizing = true;
+        text.fontSizeMin = 18;
+        text.fontSizeMax = 46;
+        text.textWrappingMode = TextWrappingModes.NoWrap;
+        text.overflowMode = TextOverflowModes.Overflow;
+        Shadowed(text, 0.8f, 2f);
+
+        var icon = Img(rim.transform, "Icon", iconSprite);
+        float d = size.y * 1.25f;
+        Place(icon.rectTransform, new Vector2(0f, 0.5f), new Vector2(-d * 0.22f, 0f), new Vector2(d, d));
+        var iconShadow = icon.gameObject.AddComponent<Shadow>();
+        iconShadow.effectColor = new Color(0f, 0f, 0f, 0.65f);
+        iconShadow.effectDistance = new Vector2(3f, -4f);
+
+        return text;
+    }
+
+    public static TMP_Text CurrencyPill(Transform parent, string name, Sprite iconSprite, string value,
+        Vector2 pos, Vector2 size, Color rimColor)
+    {
+        return CurrencyPill(parent, name, iconSprite, value, new Vector2(0f, 0.5f), pos, size, rimColor);
+    }
 }
+

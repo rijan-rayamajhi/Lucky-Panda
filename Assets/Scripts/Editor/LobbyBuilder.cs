@@ -181,11 +181,15 @@ public static class LobbyBuilder
             BuildNavBadge(i.rectTransform, navTabs[k]);
         }
 
-        // Play button (center)
-        // Placeholder: invisible hit area, no art/label (real SPIN button TBD).
-        var play = HitButton(canvasGO.transform, "PlayButton");
-        var playRT = play.GetComponent<RectTransform>();
-        Place(playRT, new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(520, 240));
+        // Slot Game Card (Center) — Ornate golden cloud frame with seamless composite art
+        Vector2 cardSize = new Vector2(340, 450); // Sleek proportional 3:4 tile fit (matching 1066x1408)
+        var cardImg = Img(canvasGO.transform, "PlayButton", ArtUI + "Card_Slot777.png");
+        cardImg.preserveAspect = true;
+        cardImg.raycastTarget = true;
+        Place(cardImg.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0, 15), cardSize);
+
+        var play = cardImg.gameObject.AddComponent<Button>();
+        play.targetGraphic = cardImg;
         // Host message group: hidden offscreen, slides in only when she speaks.
         var msgRoot = Panel(canvasGO.transform, "HostMessage");
         msgRoot.anchorMin = msgRoot.anchorMax = msgRoot.pivot = new Vector2(0, 0);
@@ -341,7 +345,8 @@ public static class LobbyBuilder
 
         // Full-screen scrim doubles as tap-to-close.
         var scrim = Img(root, "Scrim", null);
-        scrim.sprite = AssetDatabase.GetBuiltinExtraResource<Sprite>("UI/Skin/UISprite.psd");
+        scrim.sprite = null;
+        scrim.preserveAspect = false;
         scrim.color = new Color(0f, 0f, 0f, 0.72f);
         scrim.raycastTarget = true;
         Stretch(scrim.rectTransform);
@@ -526,7 +531,8 @@ public static class LobbyBuilder
         Stretch(root);
 
         var scrim = Img(root, "Scrim", null);
-        scrim.sprite = AssetDatabase.GetBuiltinExtraResource<Sprite>("UI/Skin/UISprite.psd");
+        scrim.sprite = null;
+        scrim.preserveAspect = false;
         scrim.color = new Color(0f, 0f, 0f, 0.72f);
         scrim.raycastTarget = true;
         Stretch(scrim.rectTransform);
@@ -1036,7 +1042,8 @@ public static class LobbyBuilder
         Stretch(overlay);
 
         var scrim = Img(overlay, "Scrim", null);
-        scrim.sprite = AssetDatabase.GetBuiltinExtraResource<Sprite>("UI/Skin/UISprite.psd");
+        scrim.sprite = null;
+        scrim.preserveAspect = false;
         scrim.color = new Color(0.02f, 0.01f, 0.05f, 0.93f);
         scrim.raycastTarget = true;
         Stretch(scrim.rectTransform);
@@ -1094,7 +1101,8 @@ public static class LobbyBuilder
         Stretch(root);
 
         var scrim = Img(root, "Scrim", null);
-        scrim.sprite = AssetDatabase.GetBuiltinExtraResource<Sprite>("UI/Skin/UISprite.psd");
+        scrim.sprite = null;
+        scrim.preserveAspect = false;
         scrim.color = new Color(0f, 0f, 0f, 0.55f);
         scrim.raycastTarget = true;
         Stretch(scrim.rectTransform);

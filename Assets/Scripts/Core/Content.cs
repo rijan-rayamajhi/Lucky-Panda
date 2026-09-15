@@ -84,7 +84,7 @@ public class NewsDef
 public static class Content
 {
     /// Flip when the slot scene exists; turns on every spin-driven quest.
-    public static bool SlotGameAvailable = false;
+    public static bool SlotGameAvailable = true;
 
     public const int QuestsPerDay = 3;
 
