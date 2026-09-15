@@ -13,6 +13,7 @@ public class AudioManager : MonoBehaviour
     [Header("Audio Clips")]
     public AudioClip clickSound;
     public AudioClip musicClip;
+    public AudioClip coinSound;
 
     AudioSource sfxSource;
     AudioSource musicSource;
@@ -37,6 +38,10 @@ public class AudioManager : MonoBehaviour
             if (clickSound != null)
             {
                 I.clickSound = clickSound;
+            }
+            if (coinSound != null)
+            {
+                I.coinSound = coinSound;
             }
             Destroy(gameObject);
             return;
@@ -183,5 +188,10 @@ public class AudioManager : MonoBehaviour
         if (!sfxEnabled) return;
         if (sfxSource != null && clip != null)
             sfxSource.PlayOneShot(clip, volume);
+    }
+
+    public static void PlayCoinGain()
+    {
+        if (I != null) I.PlaySound(I.coinSound);
     }
 }

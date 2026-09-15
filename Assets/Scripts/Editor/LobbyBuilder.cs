@@ -82,6 +82,11 @@ public static class LobbyBuilder
         // from. Repair the import mode before anything loads a sprite.
         SpriteImportOptimizer.EnsureSingleSpriteMode();
 
+        // A stale atlas hides any sprite added to Assets/Art/UI since the atlas
+        // was last packed — it renders as nothing at runtime even though the
+        // loose import is fine, since the Editor's Sprite Packer is always-on.
+        SpriteImportOptimizer.BuildAtlases();
+
         // Only sprites still drawn 9-sliced need borders. The pills, XP bar and
         // name plate are procedural ThemedFrames now, so re-importing their old
         // PNGs on every build was pure cost.
@@ -116,6 +121,7 @@ public static class LobbyBuilder
         var am = audioGo.GetComponent<AudioManager>();
         am.musicClip = AssetDatabase.LoadAssetAtPath<AudioClip>("Assets/Audio/Lobby_Music.mp3");
         am.clickSound = AssetDatabase.LoadAssetAtPath<AudioClip>("Assets/Audio/mixkit-select-click-1109.wav");
+        am.coinSound = AssetDatabase.LoadAssetAtPath<AudioClip>("Assets/Audio/mixkit-payout-award-ding-1935.wav");
 
         // Background
         var bg = Img(canvasGO.transform, "Background", ArtBG + "BG_Lobby.png");
@@ -384,13 +390,13 @@ public static class LobbyBuilder
 
         // Level text
         var levelText = Label(content, "LevelText", "LVL 1");
-        Place(levelText.rectTransform, new Vector2(0, 1), new Vector2(656, -14), new Vector2(200, 48));
+        Place(levelText.rectTransform, new Vector2(0, 1), new Vector2(656, -14), new Vector2(180, 48));
         levelText.alignment = TextAlignmentOptions.MidlineLeft;
         levelText.fontSize = 32;
         levelText.color = GoldBright;
 
         // XP progress bar
-        var xpSize = new Vector2(716, 44);
+        var xpSize = new Vector2(670, 44);
         var xpBg = Frame(content, "XpBg", xpSize.y * 0.5f, 6f, Gold, TrackFillTop, TrackFillBottom);
         Place(xpBg.rectTransform, new Vector2(0, 1), new Vector2(174, -92), xpSize);
 
@@ -729,19 +735,8 @@ public static class LobbyBuilder
         Place(pointer.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0, 20 + 235f), new Vector2(56, 66));
 
         // Center SPIN button (does not rotate with the wheel).
-        var spinFrame = Frame(content, "SpinButton", 80f, 6f, GoldBright,
-            new Color(0.16f, 0.42f, 0.12f, 1f), new Color(0.08f, 0.24f, 0.07f, 1f));
-        spinFrame.raycastTarget = true;
-        Place(spinFrame.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0, 20), new Vector2(150, 150));
-        var spinLbl = Label(spinFrame.transform, "Text", "SPIN");
-        Stretch(spinLbl.rectTransform);
-        spinLbl.alignment = TextAlignmentOptions.Center;
-        spinLbl.textWrappingMode = TextWrappingModes.NoWrap;
-        spinLbl.enableAutoSizing = true;
-        spinLbl.fontSizeMin = 20;
-        spinLbl.fontSizeMax = 42;
-        var spinBtn = spinFrame.gameObject.AddComponent<Button>();
-        spinBtn.targetGraphic = spinFrame;
+        var spinBtn = PillButton(content, "SpinButton", "SPIN", new Vector2(150, 150));
+        Place(spinBtn.GetComponent<RectTransform>(), new Vector2(0.5f, 0.5f), new Vector2(0, 20), new Vector2(150, 150));
 
         var status = Label(content, "Status", "");
         Place(status.rectTransform, new Vector2(0.5f, 0f), new Vector2(0, 6), new Vector2(760, 54));
@@ -778,16 +773,8 @@ public static class LobbyBuilder
         amount.fontSize = 34;
         amount.color = new Color(1f, 0.91f, 0.62f);
 
-        var priceBtn = Frame(packBg.transform, "Price", 16f, 3f, GoldBright,
-            new Color(0.16f, 0.42f, 0.12f, 1f), new Color(0.08f, 0.24f, 0.07f, 1f));
-        priceBtn.raycastTarget = true;
-        Place(priceBtn.rectTransform, new Vector2(0.5f, 0f), new Vector2(0, 16), new Vector2(200, 62));
-        var priceLbl = Label(priceBtn.transform, "Text", price);
-        Stretch(priceLbl.rectTransform);
-        priceLbl.alignment = TextAlignmentOptions.Center;
-        priceLbl.fontSize = 32;
-        var btn = priceBtn.gameObject.AddComponent<Button>();
-        btn.targetGraphic = priceBtn;
+        var btn = PillButton(packBg.transform, "Price", price, new Vector2(200, 62));
+        Place(btn.GetComponent<RectTransform>(), new Vector2(0.5f, 0f), new Vector2(0, 16), new Vector2(200, 62));
 
         var pack = packBg.gameObject.AddComponent<ShopPack>();
         pack.coins = coins;
@@ -1216,8 +1203,11 @@ public static class LobbyBuilder
         label.alignment = TextAlignmentOptions.Center;
         label.textWrappingMode = TextWrappingModes.NoWrap;
         label.enableAutoSizing = true;
-        label.fontSizeMin = 14;
+        label.fontSizeMin = 10;
         label.fontSizeMax = 32;
+        // Even at fontSizeMin, a label longer than the plate's painted end
+        // caps allow would otherwise spill past the pill's rounded border.
+        label.overflowMode = TextOverflowModes.Ellipsis;
         UIFactory.Shadowed(label, 0.85f, 2f);
 
         var btn = graphic.gameObject.AddComponent<Button>();
@@ -1255,7 +1245,7 @@ public static class LobbyBuilder
     const string DisplayTtf = FontDir + "SairaSemiCondensed-Black.ttf";
 
     static TMP_FontAsset _display;
-    static TMP_FontAsset DisplayFont => _display ??= EnsureFont(DisplayTtf);
+    internal static TMP_FontAsset DisplayFont => _display ??= EnsureFont(DisplayTtf);
 
     // Builds the SDF font asset on first use so the Font Asset Creator
     // window never has to be opened by hand.

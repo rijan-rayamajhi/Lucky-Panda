@@ -59,6 +59,7 @@ public class GameState : MonoBehaviour
             amount = (long)Math.Round(amount * (double)ClubService.CoinMultiplier);
 
         Data.coins += amount;
+        AudioManager.PlayCoinGain();
         bool won = src == RewardSource.Win || src == RewardSource.Wheel;
         if (won)
         {

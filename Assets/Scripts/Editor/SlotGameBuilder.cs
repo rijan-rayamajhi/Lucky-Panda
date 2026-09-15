@@ -33,6 +33,12 @@ public static class SlotGameBuilder
     public static void Build()
     {
         AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
+        SpriteImportOptimizer.EnsureSingleSpriteMode();
+
+        // A stale atlas hides any sprite added to Assets/Art/UI since the atlas
+        // was last packed — it renders as nothing at runtime even though the
+        // loose import is fine, since the Editor's Sprite Packer is always-on.
+        SpriteImportOptimizer.BuildAtlases();
 
         var scene = EditorSceneManager.NewScene(NewSceneSetup.DefaultGameObjects, NewSceneMode.Single);
 
@@ -57,6 +63,7 @@ public static class SlotGameBuilder
         var am = audioGO.GetComponent<AudioManager>();
         am.musicClip = AssetDatabase.LoadAssetAtPath<AudioClip>("Assets/Audio/Lobby_Music.mp3");
         am.clickSound = AssetDatabase.LoadAssetAtPath<AudioClip>("Assets/Audio/mixkit-select-click-1109.wav");
+        am.coinSound = AssetDatabase.LoadAssetAtPath<AudioClip>("Assets/Audio/mixkit-payout-award-ding-1935.wav");
 
         // 2. Background
         var bg = Img(canvasGO.transform, "Background", ArtBG + "Bg_Slot777.png");
@@ -83,19 +90,12 @@ public static class SlotGameBuilder
         var coinText = CurrencyPill(hud, "CoinPill", ArtUI + "Icon_Coin.png", "1,000,000",
             new Vector2(510, 0), new Vector2(380, 84), GoldBright);
 
-        // Settings Button (Top Right, matching Lobby size 86x86)
-        var settingsBtn = Btn(hud, "SettingsButton", ArtUI + "Icon_Settings.png");
-        Place(settingsBtn.GetComponent<RectTransform>(), new Vector2(1, 0.5f), new Vector2(-60, 0), new Vector2(86, 86));
-
-        // Settings Panel
-        var settingsPanel = BuildSettingsPanel(canvasGO.transform);
-
         // 5. Jackpot Tickers (Row below HUD - 920px container matching the slot cabinet width)
         var jackpots = Panel(safe, "JackpotHeader");
-        Place(jackpots, new Vector2(0.5f, 1f), new Vector2(0, -96), new Vector2(920, 52));
+        Place(jackpots, new Vector2(0.5f, 1f), new Vector2(0, -96), new Vector2(920, 62));
         var jpLayout = jackpots.gameObject.AddComponent<HorizontalLayoutGroup>();
         jpLayout.childAlignment = TextAnchor.MiddleCenter;
-        jpLayout.spacing = 14;
+        jpLayout.spacing = 8;
         jpLayout.childForceExpandWidth = false;
         jpLayout.childForceExpandHeight = false;
 
@@ -209,20 +209,22 @@ public static class SlotGameBuilder
         // Bet plus button
         var betPlus  = BtnText(deck, "BetPlus", "+", new Vector2(0.5f, 0.5f), new Vector2(-15, 0), new Vector2(50, 50));
 
+        // MAX BET / AUTO / SPIN share one uniform pill size so the deck reads
+        // as a consistent row instead of three mismatched buttons.
+        var actionSize = new Vector2(150, 78);
+
         // MAX BET button
-        var maxBetBtn = Btn(deck, "MaxBetBtn", ArtUI + "Btn_MaxBet.png");
-        Place(maxBetBtn.GetComponent<RectTransform>(), new Vector2(0.5f, 0.5f), new Vector2(85, 0), new Vector2(105, 64));
+        var maxBetBtn = BtnPill(deck, "MaxBetBtn", "MAX BET", new Vector2(0.5f, 0.5f), new Vector2(100, 0), actionSize);
 
         // Auto spin button
-        var autoBtn = BtnPill(deck, "AutoSpinBtn", "AUTO", new Vector2(0.5f, 0.5f), new Vector2(215, 0), new Vector2(105, 64));
+        var autoBtn = BtnPill(deck, "AutoSpinBtn", "AUTO", new Vector2(0.5f, 0.5f), new Vector2(265, 0), actionSize);
         var autoDot = Img(autoBtn.transform, "Dot", null);
         autoDot.sprite = AssetDatabase.GetBuiltinExtraResource<Sprite>("UI/Skin/UISprite.psd");
         autoDot.color = new Color(0.6f, 0.6f, 0.6f, 0.5f);
         Place(autoDot.rectTransform, new Vector2(1f, 1f), new Vector2(-14, -14), new Vector2(16, 16));
 
         // Big golden mechanical SPIN button
-        var spinBtn = Btn(deck, "SpinBtn", ArtUI + "Btn_Spin.png");
-        Place(spinBtn.GetComponent<RectTransform>(), new Vector2(0.5f, 0.5f), new Vector2(410, 6), new Vector2(200, 100));
+        var spinBtn = BtnPill(deck, "SpinBtn", "SPIN", new Vector2(0.5f, 0.5f), new Vector2(430, 0), actionSize);
 
         // 8. Free Spins Banner (top banner that drops down)
         var fsBanner = Frame(safe, "FreeSpinsBanner", 24f, 6f, new Color(1f, 0.85f, 0.2f), new Color(0.6f, 0.08f, 0.05f), new Color(0.3f, 0.02f, 0.02f));
@@ -278,10 +280,9 @@ public static class SlotGameBuilder
 
         ui.machine = machine;
         ui.coinText = coinText;
+        ui.coinIcon = Load(ArtUI + "Icon_Coin.png");
         ui.gemText = gemText;
         ui.backToLobbyBtn = backBtn;
-        ui.settingsBtn = settingsBtn;
-        ui.settingsPanel = settingsPanel;
         ui.grandText = grandText;
         ui.majorText = majorText;
         ui.minorText = minorText;
@@ -299,7 +300,6 @@ public static class SlotGameBuilder
 
         // Explicit direct event wiring in builder for fail-safe runtime operation
         backBtn.onClick.AddListener(ui.OnBackToLobbyClicked);
-        settingsBtn.onClick.AddListener(settingsPanel.Open);
         betMinus.onClick.AddListener(() => machine.ChangeBet(-1));
         betPlus.onClick.AddListener(() => machine.ChangeBet(1));
         maxBetBtn.onClick.AddListener(() => machine.SetMaxBet());
@@ -337,43 +337,66 @@ public static class SlotGameBuilder
         var bar = Img(parent, title + "Plate", barPath);
         bar.preserveAspect = true;
         var rt = bar.rectTransform;
-        rt.sizeDelta = new Vector2(216, 52);
+        rt.sizeDelta = new Vector2(224, 62);
 
         var txt = Label(bar.transform, "Amount", amount);
-        txt.fontSize = 20;
+        txt.fontSize = 24;
         txt.enableAutoSizing = true;
-        txt.fontSizeMin = 13;
-        txt.fontSizeMax = 20;
+        txt.fontSizeMin = 11;
+        txt.fontSizeMax = 24;
         txt.textWrappingMode = TextWrappingModes.NoWrap;
         txt.overflowMode = TextOverflowModes.Ellipsis;
         txt.color = Color.white;
-        Place(txt.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(8, 0), new Vector2(150, 32));
+        // Narrower than the plate: the bar art's scrollwork end caps eat more
+        // width than a plain rectangle, so a box sized to the full plate lets
+        // digits spill past the painted border.
+        Place(txt.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(4, 0), new Vector2(128, 38));
         return txt;
     }
 
+    // Exactly matches LobbyBuilder.PillButton — same Btn_Gold.png art, so
+    // every text button in the game (lobby and slot scene) reads as one
+    // consistent widget.
+    const float ButtonArtHeight = 562f;
+
     static Button BtnPill(Transform parent, string name, string text, Vector2 anchor, Vector2 pos, Vector2 size)
     {
-        var rootGO = new GameObject(name, typeof(RectTransform), typeof(Image), typeof(Button));
-        rootGO.transform.SetParent(parent, false);
-        var rt = rootGO.GetComponent<RectTransform>();
-        Place(rt, anchor, pos, size);
+        Graphic graphic;
+        var plate = Load(ArtUI + "Btn_Gold.png");
+        if (plate != null)
+        {
+            var img = Img(parent, name, ArtUI + "Btn_Gold.png");
+            img.type = Image.Type.Sliced;
+            img.preserveAspect = false;
+            img.raycastTarget = true;
+            img.pixelsPerUnitMultiplier = ButtonArtHeight / Mathf.Max(1f, size.y);
+            Place(img.rectTransform, anchor, pos, size);
+            graphic = img;
+        }
+        else
+        {
+            var frame = Frame(parent, name, size.y * 0.5f, 6f, GoldBright, PillTop, PillBottom);
+            Place(frame.rectTransform, anchor, pos, size);
+            graphic = frame;
+        }
 
-        var hitImg = rootGO.GetComponent<Image>();
-        hitImg.color = new Color(1f, 1f, 1f, 0f);
-        hitImg.raycastTarget = true;
-
-        var frame = Frame(rootGO.transform, "Plate", size.y * 0.5f, 6f, GoldBright, PillTop, PillBottom);
-        Stretch(frame.rectTransform);
-        frame.raycastTarget = false;
-
-        var lbl = Label(rootGO.transform, "Text", text);
+        var lbl = Label(graphic.transform, "Text", text);
         lbl.fontSize = 24;
-        lbl.color = GoldBright;
+        lbl.enableAutoSizing = true;
+        lbl.fontSizeMin = 10;
+        lbl.fontSizeMax = 40;
+        lbl.textWrappingMode = TextWrappingModes.NoWrap;
+        // Even at fontSizeMin, a label longer than the plate's painted end
+        // caps allow would otherwise spill past the pill's rounded border.
+        lbl.overflowMode = TextOverflowModes.Ellipsis;
+        lbl.color = Color.white;
         Stretch(lbl.rectTransform);
+        lbl.rectTransform.offsetMin = new Vector2(size.x * 0.14f, 0f);
+        lbl.rectTransform.offsetMax = new Vector2(-size.x * 0.14f, 0f);
         lbl.raycastTarget = false;
 
-        var btn = rootGO.GetComponent<Button>();
-        btn.targetGraphic = hitImg;
+        var btn = graphic.gameObject.AddComponent<Button>();
+        btn.targetGraphic = graphic;
         return btn;
     }
 
@@ -384,28 +407,7 @@ public static class SlotGameBuilder
 
     static Button BtnText(Transform parent, string name, string text, Vector2 anchor, Vector2 pos, Vector2 size)
     {
-        var rootGO = new GameObject(name, typeof(RectTransform), typeof(Image), typeof(Button));
-        rootGO.transform.SetParent(parent, false);
-        var rt = rootGO.GetComponent<RectTransform>();
-        Place(rt, anchor, pos, size);
-
-        var hitImg = rootGO.GetComponent<Image>();
-        hitImg.color = new Color(1f, 1f, 1f, 0f);
-        hitImg.raycastTarget = true;
-
-        var frame = Frame(rootGO.transform, "Plate", size.y * 0.5f, 4f, GoldBright, PillTop, PillBottom);
-        Stretch(frame.rectTransform);
-        frame.raycastTarget = false;
-
-        var lbl = Label(rootGO.transform, "Text", text);
-        lbl.fontSize = 32;
-        lbl.color = GoldBright;
-        Stretch(lbl.rectTransform);
-        lbl.raycastTarget = false;
-
-        var btn = rootGO.GetComponent<Button>();
-        btn.targetGraphic = hitImg;
-        return btn;
+        return BtnPill(parent, name, text, anchor, pos, size);
     }
 
     // Exactly matches LobbyBuilder.CurrencyPill
@@ -441,41 +443,6 @@ public static class SlotGameBuilder
         return text;
     }
 
-    static SettingsPanel BuildSettingsPanel(Transform parent)
-    {
-        var root = Panel(parent, "SettingsPanel");
-        Stretch(root);
-
-        var scrim = Img(root, "Scrim", null);
-        scrim.sprite = null;
-        scrim.preserveAspect = false;
-        scrim.color = new Color(0f, 0f, 0f, 0.75f);
-        scrim.raycastTarget = true;
-        Stretch(scrim.rectTransform);
-
-        var cardSize = new Vector2(720, 520);
-        var card = Img(root, "Card", ArtUI + "Panel_Popup2.png");
-        card.preserveAspect = false;
-        card.raycastTarget = true;
-        Place(card.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0, -10), cardSize);
-
-        var title = Img(card.transform, "TitleBar", ArtUI + "Bar_Major.png");
-        title.preserveAspect = true;
-        Place(title.rectTransform, new Vector2(0.5f, 1f), new Vector2(0, -40), new Vector2(420, 110));
-        var titleText = Label(title.transform, "Text", "SETTINGS");
-        titleText.fontSize = 32;
-        Place(titleText.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0, -6), new Vector2(340, 60));
-
-        var close = Btn(card.transform, "CloseBtn", ArtUI + "Btn_Close.png");
-        Place(close.GetComponent<RectTransform>(), new Vector2(1, 1), new Vector2(-28, -28), new Vector2(64, 64));
-
-        var sp = root.gameObject.AddComponent<SettingsPanel>();
-        sp.root = root.gameObject;
-        OnClick(close, sp.Close);
-        root.gameObject.SetActive(false);
-        return sp;
-    }
-
     static Sprite Load(string path)
     {
         if (string.IsNullOrEmpty(path)) return null;
@@ -501,14 +468,6 @@ public static class SlotGameBuilder
         return img;
     }
 
-    static Button Btn(Transform parent, string name, string path)
-    {
-        var i = Img(parent, name, path);
-        i.raycastTarget = true;
-        var b = i.gameObject.AddComponent<Button>();
-        b.targetGraphic = i;
-        return b;
-    }
 
     static RectTransform Panel(Transform parent, string name)
     {
@@ -522,6 +481,7 @@ public static class SlotGameBuilder
         var go = new GameObject(name, typeof(TextMeshProUGUI));
         go.transform.SetParent(parent, false);
         var t = go.GetComponent<TextMeshProUGUI>();
+        if (LobbyBuilder.DisplayFont != null) t.font = LobbyBuilder.DisplayFont;
         t.text = text;
         t.alignment = TextAlignmentOptions.Center;
         t.raycastTarget = false;

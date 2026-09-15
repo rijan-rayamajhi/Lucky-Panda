@@ -184,16 +184,29 @@ public class SlotMachine : MonoBehaviour
 
         // Record spin to GameState and quests
         var state = GameState.I;
+        long prevCoins = state != null ? state.Data.coins : 0;
+        bool won = false;
         if (state != null)
         {
             state.RecordSpin(bet, lastEvaluation.totalWin);
             if (lastEvaluation.totalWin > 0)
             {
                 state.AddCoins(lastEvaluation.totalWin, RewardSource.Win);
+                won = true;
             }
         }
 
-        ui.RefreshBalances();
+        // A win animates the coin balance counting up with flying coins;
+        // anything else (no win, or no GameState) just snaps both balances.
+        if (won)
+        {
+            ui.RefreshGemsOnly();
+            ui.AnimateCoinGain(prevCoins, state.Data.coins);
+        }
+        else
+        {
+            ui.RefreshBalances();
+        }
 
         // Check Free Spins trigger
         if (lastEvaluation.isFreeSpinsTriggered)

@@ -176,8 +176,11 @@ public static class UIFactory
         label.alignment = TextAlignmentOptions.Center;
         label.textWrappingMode = TextWrappingModes.NoWrap;
         label.enableAutoSizing = true;
-        label.fontSizeMin = 14;
+        label.fontSizeMin = 10;
         label.fontSizeMax = 30;
+        // Even at fontSizeMin, a label longer than the plate's painted end
+        // caps allow would otherwise spill past the pill's rounded border.
+        label.overflowMode = TextOverflowModes.Ellipsis;
         Shadowed(label, 0.85f, 2f);
 
         var btn = graphic.gameObject.AddComponent<Button>();

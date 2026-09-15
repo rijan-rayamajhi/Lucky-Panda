@@ -36,8 +36,13 @@ public class SlotUI : MonoBehaviour
     public GameObject freeSpinsBanner;
     public TMP_Text freeSpinsCountText;
 
+    [Header("Coin Gain Effect")]
+    public Sprite coinIcon;
+    const int FlyingCoinCount = 8;
+
     long displayedWin = 0;
     Coroutine winRollRoutine;
+    Coroutine coinGainRoutine;
 
     // Progressive jackpot base amounts
     double grandPool = 1_250_000;
@@ -111,6 +116,90 @@ public class SlotUI : MonoBehaviour
         var c = CultureInfo.InvariantCulture;
         if (coinText) coinText.text = s.Data.coins.ToString("N0", c);
         if (gemText) gemText.text = s.Data.gems.ToString(c);
+    }
+
+    public void RefreshGemsOnly()
+    {
+        var s = GameState.I;
+        if (s == null) return;
+        if (gemText) gemText.text = s.Data.gems.ToString(CultureInfo.InvariantCulture);
+    }
+
+    // Coins fly from the win pill to the HUD balance while the balance text
+    // counts up to match, so a win reads as coins landing rather than a jump.
+    public void AnimateCoinGain(long from, long to)
+    {
+        if (coinGainRoutine != null) StopCoroutine(coinGainRoutine);
+        if (to <= from || winAmountText == null || coinText == null)
+        {
+            if (coinText) coinText.text = to.ToString("N0", CultureInfo.InvariantCulture);
+            return;
+        }
+        coinGainRoutine = StartCoroutine(CoinGainRoutine(from, to));
+    }
+
+    const float CoinFlightDuration = 0.6f;
+
+    IEnumerator CoinGainRoutine(long start, long target)
+    {
+        // Runs for as long as the coin sound plays, so the count-up and the
+        // last coins landing line up with the audio instead of finishing
+        // while the ding is still ringing.
+        var clip = AudioManager.I != null ? AudioManager.I.coinSound : null;
+        float duration = clip != null ? clip.length : 0.9f;
+
+        float stagger = Mathf.Max(0.05f, (duration - CoinFlightDuration) / FlyingCoinCount);
+        for (int i = 0; i < FlyingCoinCount; i++)
+            StartCoroutine(FlyOneCoin(winAmountText.rectTransform.position, coinText.rectTransform.position, i * stagger));
+
+        float elapsed = 0f;
+        var c = CultureInfo.InvariantCulture;
+        while (elapsed < duration)
+        {
+            elapsed += Time.deltaTime;
+            long cur = (long)Mathf.Lerp(start, target, elapsed / duration);
+            if (coinText) coinText.text = cur.ToString("N0", c);
+            yield return null;
+        }
+
+        if (coinText) coinText.text = target.ToString("N0", c);
+    }
+
+    IEnumerator FlyOneCoin(Vector3 fromPos, Vector3 toPos, float delay)
+    {
+        if (coinIcon == null) yield break;
+        if (delay > 0f) yield return new WaitForSeconds(delay);
+
+        var go = new GameObject("FlyingCoin", typeof(RectTransform), typeof(Image));
+        go.transform.SetParent(transform, false);
+        go.transform.SetAsLastSibling();
+        var rt = (RectTransform)go.transform;
+        rt.sizeDelta = new Vector2(44, 44);
+        Vector3 start = fromPos + (Vector3)Random.insideUnitCircle * 30f;
+        rt.position = start;
+
+        var img = go.GetComponent<Image>();
+        img.sprite = coinIcon;
+        img.raycastTarget = false;
+        img.preserveAspect = true;
+
+        // Random arc peak so the coins scatter instead of travelling in a
+        // dead-straight line to the balance pill.
+        Vector3 arcOffset = new Vector3(Random.Range(-40f, 40f), Random.Range(40f, 90f), 0f);
+
+        float duration = CoinFlightDuration;
+        float elapsed = 0f;
+        while (elapsed < duration)
+        {
+            elapsed += Time.deltaTime;
+            float t = elapsed / duration;
+            float ease = 1f - (1f - t) * (1f - t);
+            rt.position = Vector3.Lerp(start, toPos, ease) + arcOffset * (4f * ease * (1f - ease));
+            rt.localScale = Vector3.one * Mathf.Lerp(1f, 0.4f, ease);
+            yield return null;
+        }
+
+        Destroy(go);
     }
 
     public void RefreshBet(long bet)
