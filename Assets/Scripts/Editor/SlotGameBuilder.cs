@@ -7,8 +7,6 @@ using TMPro;
 public static class SlotGameBuilder
 {
     const string ArtUI = "Assets/Art/UI/";
-    const string ArtBG = "Assets/Art/Backgrounds/";
-    const string ArtSymbols = "Assets/Art/Symbols/";
 
     static readonly Color GoldBright    = new Color(1f, 0.88f, 0.45f);
     static readonly Color GemBlue       = new Color(0.28f, 0.62f, 0.98f);
@@ -17,28 +15,53 @@ public static class SlotGameBuilder
     static readonly Color PillTop       = new Color(0.12f, 0.09f, 0.16f, 0.96f);
     static readonly Color PillBottom    = new Color(0.05f, 0.03f, 0.08f, 0.96f);
 
-    [MenuItem("Lucky Panda/Open Slot Game Scene")]
-    public static void OpenSlotGameScene()
-    {
-        EditorSceneManager.OpenScene("Assets/Scenes/SlotGame.unity");
-    }
-
-    [MenuItem("Lucky Panda/Open Lobby Scene")]
+    [MenuItem("Lucky Panda/Open Scene/Lobby")]
     public static void OpenLobbyScene()
     {
         EditorSceneManager.OpenScene("Assets/Scenes/Lobby.unity");
     }
 
-    [MenuItem("Lucky Panda/Build Slot Game Scene")]
-    public static void Build()
+    [MenuItem("Lucky Panda/Open Scene/Classic 777")]
+    public static void OpenSlotGameScene()
     {
-        AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
-        SpriteImportOptimizer.EnsureSingleSpriteMode();
+        EditorSceneManager.OpenScene(SlotCatalog.Classic777.ScenePath);
+    }
 
-        // A stale atlas hides any sprite added to Assets/Art/UI since the atlas
-        // was last packed — it renders as nothing at runtime even though the
-        // loose import is fine, since the Editor's Sprite Packer is always-on.
-        SpriteImportOptimizer.BuildAtlases();
+    [MenuItem("Lucky Panda/Open Scene/Triple Diamond")]
+    public static void OpenTripleDiamondScene()
+    {
+        EditorSceneManager.OpenScene(SlotCatalog.TripleDiamond.ScenePath);
+    }
+
+    /// The one build command: fix up the art imports once, then regenerate the
+    /// lobby and every machine. Rebuilding one scene at a time invited the two
+    /// halves to drift apart.
+    [MenuItem("Lucky Panda/Build Everything")]
+    public static void BuildEverything()
+    {
+        if (!CanBuild()) return;
+
+        AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
+        SpriteImportOptimizer.Optimize();
+
+        foreach (var d in SlotCatalog.All) BuildGame(d);
+        LobbyBuilder.Build();
+
+        Debug.Log($"Built the lobby and {SlotCatalog.All.Length} machine(s). Open a scene from Lucky Panda > Open Scene.");
+    }
+
+    /// Scene building replaces the open scene, which Unity forbids in play mode
+    /// — without this the whole run dies on a NewScene exception.
+    internal static bool CanBuild()
+    {
+        if (!EditorApplication.isPlayingOrWillChangePlaymode) return true;
+        Debug.LogError("Stop play mode before building scenes.");
+        return false;
+    }
+
+    public static void BuildGame(SlotGameDef def)
+    {
+        if (!CanBuild()) return;
 
         var scene = EditorSceneManager.NewScene(NewSceneSetup.DefaultGameObjects, NewSceneMode.Single);
 
@@ -66,7 +89,7 @@ public static class SlotGameBuilder
         am.coinSound = AssetDatabase.LoadAssetAtPath<AudioClip>("Assets/Audio/mixkit-payout-award-ding-1935.wav");
 
         // 2. Background
-        var bg = Img(canvasGO.transform, "Background", ArtBG + "Bg_Slot777.png");
+        var bg = Img(canvasGO.transform, "Background", def.backgroundPath);
         bg.preserveAspect = false;
         Stretch(bg.rectTransform);
 
@@ -104,64 +127,65 @@ public static class SlotGameBuilder
         var minorText = JackpotPlate(jackpots, "MINOR", ArtUI + "Bar_Minor.png", "65,000");
         var miniText  = JackpotPlate(jackpots, "MINI",  ArtUI + "Bar_Mini.png",  "14,500");
 
-        // 6. Slot Cabinet & Reel Matrix (Center)
-        // Frame_Classic777 is 1448x1086 (1.333:1). Sized to 920x690 on canvas.
+        // 6. Slot Cabinet & Reel Matrix (Center). Every number below comes from
+        // the game def, measured from that game's frame art's inner window.
         var cabinet = Panel(safe, "SlotCabinet");
-        Place(cabinet, new Vector2(0.5f, 0.5f), new Vector2(0, 8), new Vector2(920, 690));
+        Place(cabinet, new Vector2(0.5f, 0.5f), new Vector2(0, 8), def.cabinetSize);
 
-        // Inner velvet backing behind reels (sized to inner window)
-        // Inner window is 74.0% of width (680px), 46.1% of height (318px)
+        // Inner velvet backing behind the reels, sized to the frame's window.
         var backdrop = Frame(cabinet, "VelvetBackdrop", 16f, 0f, Color.clear,
             new Color(0.08f, 0.03f, 0.12f, 0.98f), new Color(0.03f, 0.01f, 0.06f, 0.98f));
-        Place(backdrop.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0, -16), new Vector2(676, 314));
+        Place(backdrop.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0, def.reelWindowY), def.backdropSize);
 
         // Reel window with mask
         var reelWindow = Panel(cabinet, "ReelWindow");
-        Place(reelWindow, new Vector2(0.5f, 0.5f), new Vector2(0, -16), new Vector2(670, 310));
+        Place(reelWindow, new Vector2(0.5f, 0.5f), new Vector2(0, def.reelWindowY), def.reelWindowSize);
         var mask = reelWindow.gameObject.AddComponent<RectMask2D>();
 
-        // Create 3 Reel Columns
-        float colWidth = 214f;
-        float spacing = 12f;
-        float startX = -colWidth - spacing;
+        float colWidth = def.colWidth;
+        float spacing = def.colSpacing;
+        float startX = -(colWidth + spacing) * (def.cols - 1) * 0.5f;
+        string placeholderArt = def.ArtFor(def.reelStrip[0]);
 
-        var reels = new ReelColumn[SlotDef.Cols];
-        for (int c = 0; c < SlotDef.Cols; c++)
+        var reels = new ReelColumn[def.cols];
+        for (int c = 0; c < def.cols; c++)
         {
             var colGO = new GameObject($"Reel_{c}", typeof(RectTransform), typeof(ReelColumn));
             colGO.transform.SetParent(reelWindow, false);
             var colRT = colGO.GetComponent<RectTransform>();
-            Place(colRT, new Vector2(0.5f, 0.5f), new Vector2(startX + c * (colWidth + spacing), 0), new Vector2(colWidth, 310));
+            Place(colRT, new Vector2(0.5f, 0.5f), new Vector2(startX + c * (colWidth + spacing), 0),
+                  new Vector2(colWidth, def.reelWindowSize.y));
 
             var rc = colGO.GetComponent<ReelColumn>();
             rc.container = colRT;
-            rc.symbolImages = new Image[SlotDef.Rows];
+            rc.symbolImages = new Image[def.rows];
 
-            // 3 rows inside column
-            float rowHeight = 102f;
-            float rowStartY = rowHeight;
-            for (int r = 0; r < SlotDef.Rows; r++)
+            float rowStartY = def.rowHeight * (def.rows - 1) * 0.5f;
+            for (int r = 0; r < def.rows; r++)
             {
-                var symImg = Img(colRT, $"Sym_{r}", ArtSymbols + "Sym_10.png");
+                var symImg = Img(colRT, $"Sym_{r}", placeholderArt);
                 symImg.preserveAspect = true;
-                Place(symImg.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0, rowStartY - r * rowHeight), new Vector2(190, 100));
+                Place(symImg.rectTransform, new Vector2(0.5f, 0.5f),
+                      new Vector2(0, rowStartY - r * def.rowHeight), def.symbolSize);
                 rc.symbolImages[r] = symImg;
             }
             reels[c] = rc;
         }
 
-        // Two golden vertical dividers between reels
-        for (int d = 0; d < 2; d++)
+        // Golden vertical dividers between reels
+        for (int d = 0; d < def.cols - 1; d++)
         {
             var divider = Img(cabinet, $"Divider_{d}", null);
             divider.sprite = AssetDatabase.GetBuiltinExtraResource<Sprite>("UI/Skin/UISprite.psd");
             divider.color = new Color(1f, 0.82f, 0.35f, 0.45f);
-            float divX = -colWidth / 2f - spacing / 2f + d * (colWidth + spacing);
-            Place(divider.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(divX, -16), new Vector2(3, 300));
+            float divX = startX + colWidth * 0.5f + spacing * 0.5f + d * (colWidth + spacing);
+            Place(divider.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(divX, def.reelWindowY),
+                  new Vector2(3, def.dividerHeight));
         }
 
-        // Ornate 3D 777 Imperial Frame overlay sitting on top of the reels
-        var frameImg = Img(cabinet, "FrameOverlay", ArtUI + "Frame_Classic777.png");
+        // Ornate frame overlay sitting on top of the reels. Its centre is
+        // transparent, which is what the reels show through.
+        var frameImg = Img(cabinet, "FrameOverlay", def.framePath);
         frameImg.preserveAspect = true;
         Stretch(frameImg.rectTransform);
 
@@ -274,6 +298,7 @@ public static class SlotGameBuilder
         var machine = canvasGO.AddComponent<SlotMachine>();
         var ui = canvasGO.AddComponent<SlotUI>();
 
+        machine.gameId = def.id;
         machine.reels = reels;
         machine.ui = ui;
         machine.winPopup = winPopup;
@@ -306,30 +331,37 @@ public static class SlotGameBuilder
         autoBtn.onClick.AddListener(ui.OnAutoSpinClicked);
         spinBtn.onClick.AddListener(ui.OnSpinClicked);
 
-        // Register symbols into machine (serialized array for runtime persistence)
-        machine.symbolEntries = new[]
+        // Register this game's symbols into the machine (serialized array so the
+        // sprites survive without a runtime AssetDatabase lookup).
+        var entries = new System.Collections.Generic.List<SlotMachine.SymbolEntry>();
+        foreach (var kv in def.symbolArt)
         {
-            new SlotMachine.SymbolEntry { id = SymbolId.SevenRed,  sprite = Load(ArtSymbols + "Sym_7_Red.png") },
-            new SlotMachine.SymbolEntry { id = SymbolId.SevenGold, sprite = Load(ArtSymbols + "Sym_7_Gold.png") },
-            new SlotMachine.SymbolEntry { id = SymbolId.Bar,       sprite = Load(ArtSymbols + "Sym_Bar.png") },
-            new SlotMachine.SymbolEntry { id = SymbolId.Wild,      sprite = Load(ArtSymbols + "Sym_Wild.png") },
-            new SlotMachine.SymbolEntry { id = SymbolId.Scatter,   sprite = Load(ArtSymbols + "Sym_Scatter.png") },
-            new SlotMachine.SymbolEntry { id = SymbolId.Ace,       sprite = Load(ArtSymbols + "Sym_A.png") },
-            new SlotMachine.SymbolEntry { id = SymbolId.King,      sprite = Load(ArtSymbols + "Sym_K.png") },
-            new SlotMachine.SymbolEntry { id = SymbolId.Queen,     sprite = Load(ArtSymbols + "Sym_Q.png") },
-            new SlotMachine.SymbolEntry { id = SymbolId.Jack,      sprite = Load(ArtSymbols + "Sym_J.png") },
-            new SlotMachine.SymbolEntry { id = SymbolId.Ten,       sprite = Load(ArtSymbols + "Sym_10.png") }
-        };
+            var sprite = Load(kv.Value);
+            if (sprite == null)
+                Debug.LogError($"{def.displayName}: missing symbol art for {kv.Key} at {kv.Value}");
+            entries.Add(new SlotMachine.SymbolEntry { id = kv.Key, sprite = sprite });
+        }
+        machine.symbolEntries = entries.ToArray();
 
-        // 11. Register scenes in EditorBuildSettings
-        EditorBuildSettings.scenes = new[]
+        // 11. Register every scene in the catalog, so building one game can't
+        // drop another game's scene out of the build.
+        RegisterScenes();
+
+        EditorSceneManager.SaveScene(scene, def.ScenePath);
+        Debug.Log($"{def.displayName} scene built at {def.ScenePath}");
+    }
+
+    /// Lobby first (it is the entry scene), then one scene per catalog game.
+    internal static void RegisterScenes()
+    {
+        var list = new System.Collections.Generic.List<EditorBuildSettingsScene>
         {
-            new EditorBuildSettingsScene("Assets/Scenes/Lobby.unity", true),
-            new EditorBuildSettingsScene("Assets/Scenes/SlotGame.unity", true)
+            new EditorBuildSettingsScene("Assets/Scenes/Lobby.unity", true)
         };
+        foreach (var d in SlotCatalog.All)
+            list.Add(new EditorBuildSettingsScene(d.ScenePath, true));
 
-        EditorSceneManager.SaveScene(scene, "Assets/Scenes/SlotGame.unity");
-        Debug.Log("SlotGame scene built and registered successfully!");
+        EditorBuildSettings.scenes = list.ToArray();
     }
 
     static TMP_Text JackpotPlate(Transform parent, string title, string barPath, string amount)

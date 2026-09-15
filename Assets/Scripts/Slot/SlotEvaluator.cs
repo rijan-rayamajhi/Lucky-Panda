@@ -3,9 +3,9 @@ using UnityEngine;
 
 public static class SlotEvaluator
 {
-    public static SpinEvaluationResult Evaluate(SymbolId[,] grid, long totalBet)
+    public static SpinEvaluationResult Evaluate(SymbolId[,] grid, long totalBet, SlotGameDef def)
     {
-        long lineBet = totalBet / SlotDef.PaylineCount;
+        long lineBet = totalBet / def.PaylineCount;
         if (lineBet <= 0) lineBet = 1;
 
         var result = new SpinEvaluationResult
@@ -16,69 +16,78 @@ public static class SlotEvaluator
             freeSpinsAwarded = 0
         };
 
-        // 1. Evaluate 5 Paylines
-        for (int lineIdx = 0; lineIdx < SlotDef.Paylines.Length; lineIdx++)
+        // 1. Paylines
+        for (int lineIdx = 0; lineIdx < def.paylines.Length; lineIdx++)
         {
-            var coords = SlotDef.Paylines[lineIdx];
+            var coords = def.paylines[lineIdx];
             var s0 = grid[coords[0].col, coords[0].row];
             var s1 = grid[coords[1].col, coords[1].row];
             var s2 = grid[coords[2].col, coords[2].row];
 
-            // Ignore scatter on paylines (scatters pay anywhere)
-            if (s0 == SymbolId.Scatter || s1 == SymbolId.Scatter || s2 == SymbolId.Scatter)
+            // Scatters pay from anywhere, so they never form a line win.
+            if (s0 == def.scatterSymbol || s1 == def.scatterSymbol || s2 == def.scatterSymbol)
                 continue;
 
-            // Check match with Wild substitution
-            if (CheckMatch(s0, s1, s2, out SymbolId winningSym, out int mult))
+            int wilds = CountWilds(def, s0, s1, s2);
+
+            if (CheckMatch(def, s0, s1, s2, out SymbolId winningSym, out int baseMult))
             {
+                // Wilds only multiply when they stand in for something else —
+                // an all-wild line pays its own flat top award.
+                int wildMult = winningSym == def.wildSymbol ? 1 : WildMultiplier(def, wilds);
+                int mult = baseMult * wildMult;
                 long lineWin = lineBet * mult;
+
                 result.winningLines.Add(new WinLineResult
                 {
                     lineIndex = lineIdx,
                     symbol = winningSym,
                     multiplier = mult,
                     winAmount = lineWin,
-                    coords = coords
+                    coords = coords,
+                    wildMultiplier = wildMult
                 });
                 result.totalWin += lineWin;
             }
-            // Check Any 7s combo (combination of Red 7 and Gold 7)
-            else if (IsAnySeven(s0) && IsAnySeven(s1) && IsAnySeven(s2))
+            else if (def.anyComboMultiplier > 0 &&
+                     def.IsAnyComboMember(s0) && def.IsAnyComboMember(s1) && def.IsAnyComboMember(s2))
             {
-                int multAny7 = 50;
-                long lineWin = lineBet * multAny7;
+                int wildMult = WildMultiplier(def, wilds);
+                int mult = def.anyComboMultiplier * wildMult;
+                long lineWin = lineBet * mult;
+
                 result.winningLines.Add(new WinLineResult
                 {
                     lineIndex = lineIdx,
-                    symbol = SymbolId.AnySeven,
-                    multiplier = multAny7,
+                    symbol = def.anyComboSymbol,
+                    multiplier = mult,
                     winAmount = lineWin,
-                    coords = coords
+                    coords = coords,
+                    wildMultiplier = wildMult
                 });
                 result.totalWin += lineWin;
             }
         }
 
-        // 2. Evaluate Scatters (Free Spins bonus)
+        // 2. Scatters (free spins bonus)
         int scatterCount = 0;
-        for (int c = 0; c < SlotDef.Cols; c++)
+        for (int c = 0; c < def.cols; c++)
         {
-            for (int r = 0; r < SlotDef.Rows; r++)
+            for (int r = 0; r < def.rows; r++)
             {
-                if (grid[c, r] == SymbolId.Scatter)
+                if (grid[c, r] == def.scatterSymbol)
                     scatterCount++;
             }
         }
 
-        if (scatterCount >= 3)
+        if (scatterCount >= def.scatterCountForFreeSpins)
         {
             result.isFreeSpinsTriggered = true;
-            result.freeSpinsAwarded = 10;
-            // Also pays 5x total bet
-            result.totalWin += totalBet * 5;
+            result.freeSpinsAwarded = def.freeSpinsAwarded;
+            result.totalWin += totalBet * def.scatterBetMultiplier;
         }
 
-        // Determine celebration tier
+        // 3. Celebration tier
         result.totalMultiplier = (float)result.totalWin / Mathf.Max(1, totalBet);
         if (result.totalMultiplier >= 50f)
             result.tier = WinCelebrationTier.EpicWin;
@@ -94,33 +103,50 @@ public static class SlotEvaluator
         return result;
     }
 
-    static bool CheckMatch(SymbolId a, SymbolId b, SymbolId c, out SymbolId winSym, out int mult)
+    static int CountWilds(SlotGameDef def, SymbolId a, SymbolId b, SymbolId c)
     {
-        winSym = SymbolId.Ten;
+        int n = 0;
+        if (a == def.wildSymbol) n++;
+        if (b == def.wildSymbol) n++;
+        if (c == def.wildSymbol) n++;
+        return n;
+    }
+
+    /// wildLineMultiplier ^ wildCount — Triple Diamond's 3x per diamond, so two
+    /// diamonds on a line pay 9x. A multiplier of 1 makes this a no-op.
+    static int WildMultiplier(SlotGameDef def, int wildCount)
+    {
+        if (def.wildLineMultiplier <= 1 || wildCount <= 0) return 1;
+        int m = 1;
+        for (int i = 0; i < wildCount; i++) m *= def.wildLineMultiplier;
+        return m;
+    }
+
+    static bool CheckMatch(SlotGameDef def, SymbolId a, SymbolId b, SymbolId c,
+                           out SymbolId winSym, out int mult)
+    {
+        winSym = a;
         mult = 0;
 
-        // Determine candidate symbol (first non-wild, or Wild if all 3 are wild)
-        SymbolId target = SymbolId.Wild;
-        if (a != SymbolId.Wild) target = a;
-        else if (b != SymbolId.Wild) target = b;
-        else if (c != SymbolId.Wild) target = c;
+        var wild = def.wildSymbol;
 
-        bool matchA = (a == target || a == SymbolId.Wild);
-        bool matchB = (b == target || b == SymbolId.Wild);
-        bool matchC = (c == target || c == SymbolId.Wild);
+        // Candidate is the first non-wild, or the wild itself when all three are.
+        SymbolId target = wild;
+        if (a != wild) target = a;
+        else if (b != wild) target = b;
+        else if (c != wild) target = c;
+
+        bool matchA = (a == target || a == wild);
+        bool matchB = (b == target || b == wild);
+        bool matchC = (c == target || c == wild);
 
         if (matchA && matchB && matchC)
         {
             winSym = target;
-            mult = SlotDef.Get3OfAKindMultiplier(target);
-            return true;
+            mult = def.PayoutFor(target);
+            return mult > 0;
         }
 
         return false;
-    }
-
-    static bool IsAnySeven(SymbolId s)
-    {
-        return s == SymbolId.SevenRed || s == SymbolId.SevenGold || s == SymbolId.Wild;
     }
 }

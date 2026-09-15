@@ -13,7 +13,9 @@ public static class SpriteImportOptimizer
     static readonly Dictionary<string, int> PerFile = new()
     {
         // Drawn full-screen.
-        { "BG_Lobby",          2048 },
+        { "BG_Lobby",           2048 },
+        { "Bg_Slot777",         2048 },
+        { "Bg_TripleDiamond",   2048 },
         // Large panels; 512 visibly softens their painted detail.
         { "Panel_Popup",       1024 },
         { "Panel_Popup2",      1024 },
@@ -21,6 +23,13 @@ public static class SpriteImportOptimizer
         { "Host_Hero",         1024 },
         // Drawn large and full of fine gold detail; 256 turns it to mush.
         { "Wheel_Face",        1024 },
+        // Slot cabinets, drawn 920px wide with fine filigree.
+        { "Frame_Classic777",     1024 },
+        { "Frame_TripleDiamond",  1024 },
+        // Lobby tiles and their shared border, drawn ~320px wide.
+        { "Card_Slot777",          512 },
+        { "Card_TripleDiamond",    512 },
+        { "Frame_SlotGame",        512 },
         // Mid-size stretched chrome.
         { "Pill_Currency",      512 },
         { "Bar_ProgressFrame",  512 },
@@ -35,6 +44,13 @@ public static class SpriteImportOptimizer
     const int DefaultIconSize = 256;
     const int SymbolSize = 512;
 
+    /// Only sprites budgeted at or below this go in an atlas. Batching pays off
+    /// for the many small repeated icons; the big single-draw pieces (cabinet
+    /// frames, popups, the wheel face) gain nothing and, packed together,
+    /// overflow the atlas pages so the packer downscales them — which is how
+    /// the art lost resolution once the second machine's frame was added.
+    const int MaxAtlasSourceSize = 512;
+
     static readonly string[] Folders =
     {
         "Assets/Art/UI",
@@ -43,7 +59,18 @@ public static class SpriteImportOptimizer
         "Assets/Art/Backgrounds",
     };
 
-    [MenuItem("Lucky Panda/Optimize Sprite Imports")]
+    static int BudgetFor(string path)
+    {
+        var name = Path.GetFileNameWithoutExtension(path);
+        if (PerFile.TryGetValue(name, out var v)) return v;
+        return path.Contains("/Symbols/") ? SymbolSize : DefaultIconSize;
+    }
+
+    /// One pass that leaves every texture import correct: sprite mode, size
+    /// budget, compression, then atlases packed from whatever is small enough
+    /// to benefit. Build Everything runs this, so freshly dropped art can't
+    /// ship at the wrong resolution.
+    [MenuItem("Lucky Panda/Dev/Optimize Sprite Imports")]
     public static void Optimize()
     {
         int seen = 0, changed = 0;
@@ -54,50 +81,13 @@ public static class SpriteImportOptimizer
             {
                 seen++;
                 var path = file.Replace('\\', '/');
-                var name = Path.GetFileNameWithoutExtension(path);
-
-                int max = PerFile.TryGetValue(name, out var v) ? v
-                        : folder.EndsWith("Symbols") ? SymbolSize
-                        : DefaultIconSize;
-
-                if (Apply(path, max)) changed++;
+                if (Apply(path, BudgetFor(path))) changed++;
             }
         }
 
         BuildAtlases();
         AssetDatabase.Refresh();
         Debug.Log($"Sprite imports: {seen} scanned, {changed} reimported.");
-    }
-
-    // Cheap pass that only repairs the import mode, so the scene builder can
-    // guarantee no sprite lookup returns an auto-slice fragment.
-    public static void EnsureSingleSpriteMode()
-    {
-        int repaired = 0;
-        foreach (var folder in Folders)
-        {
-            if (!Directory.Exists(folder)) continue;
-            foreach (var file in Directory.GetFiles(folder, "*.png"))
-            {
-                var path = file.Replace('\\', '/');
-                var importer = AssetImporter.GetAtPath(path) as TextureImporter;
-                if (importer == null) continue;
-
-                bool dirty = false;
-                if (importer.textureType != TextureImporterType.Sprite)
-                {
-                    importer.textureType = TextureImporterType.Sprite;
-                    dirty = true;
-                }
-                if (importer.spriteImportMode != SpriteImportMode.Single)
-                {
-                    importer.spriteImportMode = SpriteImportMode.Single;
-                    dirty = true;
-                }
-                if (dirty) { importer.SaveAndReimport(); repaired++; }
-            }
-        }
-        if (repaired > 0) Debug.Log($"Sprite mode: {repaired} texture(s) reset to Single.");
     }
 
     static bool Apply(string path, int maxSize)
@@ -150,7 +140,7 @@ public static class SpriteImportOptimizer
 
     // Each unatlased sprite is its own draw call; batching the UI collapses
     // the whole HUD into a couple of them.
-    [MenuItem("Lucky Panda/Rebuild Sprite Atlases")]
+    [MenuItem("Lucky Panda/Dev/Rebuild Sprite Atlases")]
     public static void BuildAtlases()
     {
         CreateAtlas("UI", "Assets/Art/UI");
@@ -185,8 +175,19 @@ public static class SpriteImportOptimizer
         texSettings.generateMipMaps = false;
         atlas.SetTextureSettings(texSettings);
 
-        var folderAsset = AssetDatabase.LoadAssetAtPath<DefaultAsset>(folder);
-        if (folderAsset != null) atlas.Add(new Object[] { folderAsset });
+        // Adding the folder would sweep in the oversized art too. Add the
+        // individual textures that are actually small enough to pack, so the
+        // packer never has to shrink anything to make a page fit.
+        var packed = new List<Object>();
+        var skipped = new List<string>();
+        foreach (var file in Directory.GetFiles(folder, "*.png"))
+        {
+            var p = file.Replace('\\', '/');
+            if (BudgetFor(p) > MaxAtlasSourceSize) { skipped.Add(Path.GetFileNameWithoutExtension(p)); continue; }
+            var tex = AssetDatabase.LoadAssetAtPath<Texture2D>(p);
+            if (tex != null) packed.Add(tex);
+        }
+        if (packed.Count > 0) atlas.Add(packed.ToArray());
 
         SpriteAtlasAsset.Save(atlas, path);
         AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceSynchronousImport);
@@ -210,6 +211,9 @@ public static class SpriteImportOptimizer
             }
         }
 
-        Debug.Log($"Atlas ready: {path}");
+        string note = skipped.Count > 0
+            ? $" ({skipped.Count} drawn unatlased at full resolution: {string.Join(", ", skipped)})"
+            : "";
+        Debug.Log($"Atlas {name}: packed {packed.Count} sprite(s){note}");
     }
 }

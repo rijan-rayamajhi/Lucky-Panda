@@ -50,13 +50,17 @@ public class LobbyUI : MonoBehaviour
         if (gemText) gemText.text = s.Data.gems.ToString(c);
     }
 
-    public void OnPlay()
+    /// Takes an int rather than a SlotGameId so the lobby tiles can bake their
+    /// game into the scene as a persistent listener argument.
+    public void OnPlayGameIndex(int gameId)
     {
-        // The slot game scene isn't built yet; don't throw until it exists.
-        if (Application.CanStreamedLevelBeLoaded("SlotGame"))
-            UnityEngine.SceneManagement.SceneManager.LoadScene("SlotGame");
+        var def = SlotCatalog.Get((SlotGameId)gameId);
+
+        // Don't throw if that game's scene hasn't been built yet.
+        if (Application.CanStreamedLevelBeLoaded(def.sceneName))
+            UnityEngine.SceneManagement.SceneManager.LoadScene(def.sceneName);
         else
-            Debug.Log("Slot game scene not built yet.");
+            Debug.LogWarning($"Scene '{def.sceneName}' for {def.displayName} is not in the build settings yet.");
     }
 
     public void OnProfile() { if (profile) profile.Open(); }

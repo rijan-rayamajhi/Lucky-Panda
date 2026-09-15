@@ -73,7 +73,7 @@ public static class DevTools
     // Not a test framework and not trying to be: one menu item that fails
     // loudly if the logic the features depend on stops holding. Runs in edit
     // mode against a throwaway GameState, so the real save is never touched.
-    [MenuItem("Lucky Panda/Run Self-Checks")]
+    [MenuItem("Lucky Panda/Dev/Run Self-Checks")]
     public static void RunSelfChecks()
     {
         var log = new StringBuilder();

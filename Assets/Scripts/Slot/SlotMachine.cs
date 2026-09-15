@@ -13,23 +13,36 @@ public enum SlotState
 
 public class SlotMachine : MonoBehaviour
 {
-    public ReelColumn[] reels; // 3 reels
+    /// Which machine this scene is. Baked in by the scene builder; the lobby
+    /// picks the scene, not this.
+    public SlotGameId gameId = SlotGameId.Classic777;
+
+    public ReelColumn[] reels;
     public Sprite[] symbolSprites;
     public SlotUI ui;
     public SlotWinPopup winPopup;
 
+    public SlotGameDef Def { get; private set; }
+
     public SlotState State { get; private set; } = SlotState.Idle;
 
-    public int BetIndex { get; private set; } = 3; // default $10,000
-    public long CurrentBet => SlotDef.BetLadder[BetIndex];
+    public int BetIndex { get; private set; } = 3; // default 10,000
+    public long CurrentBet => Def.betLadder[Mathf.Clamp(BetIndex, 0, Def.betLadder.Length - 1)];
 
     public bool IsAutoSpin { get; private set; } = false;
     public int FreeSpinsRemaining { get; private set; } = 0;
     public bool IsFreeSpinsActive => FreeSpinsRemaining > 0;
 
     int reelsStoppedCount = 0;
-    SymbolId[,] finalOutcome = new SymbolId[SlotDef.Cols, SlotDef.Rows];
+    SymbolId[,] finalOutcome;
     SpinEvaluationResult lastEvaluation;
+
+    void Awake()
+    {
+        Def = SlotCatalog.Get(gameId);
+        finalOutcome = new SymbolId[Def.cols, Def.rows];
+        BetIndex = Mathf.Clamp(BetIndex, 0, Def.betLadder.Length - 1);
+    }
 
     [System.Serializable]
     public struct SymbolEntry
@@ -57,7 +70,7 @@ public class SlotMachine : MonoBehaviour
     {
         for (int c = 0; c < reels.Length; c++)
         {
-            reels[c].Init(c, 150f, GetSprite, OnReelFinished);
+            reels[c].Init(c, Def.rows, Def.reelStrip, Def.rowHeight, GetSprite, OnReelFinished);
         }
         ui.RefreshBet(CurrentBet);
         ui.RefreshBalances();
@@ -66,7 +79,7 @@ public class SlotMachine : MonoBehaviour
     public void ChangeBet(int delta)
     {
         if (State != SlotState.Idle || IsFreeSpinsActive) return;
-        BetIndex = Mathf.Clamp(BetIndex + delta, 0, SlotDef.BetLadder.Length - 1);
+        BetIndex = Mathf.Clamp(BetIndex + delta, 0, Def.betLadder.Length - 1);
         ui.RefreshBet(CurrentBet);
         AudioManager.PlayClick();
     }
@@ -74,7 +87,7 @@ public class SlotMachine : MonoBehaviour
     public void SetMaxBet()
     {
         if (State != SlotState.Idle || IsFreeSpinsActive) return;
-        BetIndex = SlotDef.BetLadder.Length - 1;
+        BetIndex = Def.betLadder.Length - 1;
         ui.RefreshBet(CurrentBet);
         AudioManager.PlayClick();
     }
@@ -136,12 +149,12 @@ public class SlotMachine : MonoBehaviour
 
         // Determine final outcome
         finalOutcome = GenerateOutcome();
-        lastEvaluation = SlotEvaluator.Evaluate(finalOutcome, bet);
+        lastEvaluation = SlotEvaluator.Evaluate(finalOutcome, bet, Def);
 
-        // Apply 2x multiplier during Free Spins!
-        if (IsFreeSpinsActive)
+        // Free spins pay a multiple of the normal win.
+        if (IsFreeSpinsActive && Def.freeSpinWinMultiplier > 1)
         {
-            lastEvaluation.totalWin *= 2;
+            lastEvaluation.totalWin *= Def.freeSpinWinMultiplier;
         }
 
         // Start spinning all reels
@@ -156,8 +169,8 @@ public class SlotMachine : MonoBehaviour
         // Cascade stop with delays
         for (int c = 0; c < reels.Length; c++)
         {
-            var colSymbols = new SymbolId[SlotDef.Rows];
-            for (int r = 0; r < SlotDef.Rows; r++)
+            var colSymbols = new SymbolId[Def.rows];
+            for (int r = 0; r < Def.rows; r++)
                 colSymbols[r] = finalOutcome[c, r];
 
             reels[c].RequestStop(colSymbols);
@@ -269,9 +282,9 @@ public class SlotMachine : MonoBehaviour
     void HighlightWinningPaylines()
     {
         // Dim all symbols first
-        for (int c = 0; c < SlotDef.Cols; c++)
+        for (int c = 0; c < Def.cols && c < reels.Length; c++)
         {
-            for (int r = 0; r < SlotDef.Rows; r++)
+            for (int r = 0; r < Def.rows; r++)
                 reels[c].HighlightSymbol(r, false);
         }
 
@@ -289,7 +302,7 @@ public class SlotMachine : MonoBehaviour
 
     void ResetSymbolHighlights()
     {
-        for (int c = 0; c < SlotDef.Cols; c++)
+        for (int c = 0; c < Def.cols && c < reels.Length; c++)
         {
             reels[c].ResetHighlights();
         }
@@ -297,39 +310,52 @@ public class SlotMachine : MonoBehaviour
 
     SymbolId[,] GenerateOutcome()
     {
-        var grid = new SymbolId[SlotDef.Cols, SlotDef.Rows];
-        int stripLen = SlotDef.ReelStrip.Length;
+        var grid = new SymbolId[Def.cols, Def.rows];
+        var strip = Def.reelStrip;
+        int stripLen = strip.Length;
 
         // Base random selection
-        for (int c = 0; c < SlotDef.Cols; c++)
+        for (int c = 0; c < Def.cols; c++)
         {
             int centerIdx = UnityEngine.Random.Range(0, stripLen);
-            for (int r = 0; r < SlotDef.Rows; r++)
+            for (int r = 0; r < Def.rows; r++)
             {
                 int idx = (centerIdx + r - 1 + stripLen) % stripLen;
-                grid[c, r] = SlotDef.ReelStrip[idx];
+                grid[c, r] = strip[idx];
             }
         }
 
-        // 35% chance of guaranteed win to ensure lively exciting gameplay
-        if (UnityEngine.Random.value < 0.35f)
+        // Nudge a share of spins into a guaranteed line win so the game stays
+        // lively. The pool excludes top-award symbols on purpose.
+        if (UnityEngine.Random.value < Def.guaranteedWinChance)
         {
-            int winLine = UnityEngine.Random.Range(0, SlotDef.Paylines.Length);
-            SymbolId winSym;
-            float roll = UnityEngine.Random.value;
-            if (roll < 0.05f) winSym = SymbolId.SevenRed;       // 5% Red 7 jackpot
-            else if (roll < 0.12f) winSym = SymbolId.SevenGold; // 7% Gold 7
-            else if (roll < 0.25f) winSym = SymbolId.Bar;       // 13% Bar
-            else if (roll < 0.45f) winSym = SymbolId.Ace;       // 20% Ace
-            else if (roll < 0.70f) winSym = SymbolId.King;      // 25% King
-            else winSym = SymbolId.Queen;
+            int winLine = UnityEngine.Random.Range(0, Def.paylines.Length);
+            var winSym = PickFavoredSymbol();
 
-            foreach (var coord in SlotDef.Paylines[winLine])
+            foreach (var coord in Def.paylines[winLine])
             {
                 grid[coord.col, coord.row] = winSym;
             }
         }
 
         return grid;
+    }
+
+    SymbolId PickFavoredSymbol()
+    {
+        var table = Def.winFavorTable;
+        if (table == null || table.Length == 0) return SymbolId.Ten;
+
+        float total = 0f;
+        for (int i = 0; i < table.Length; i++) total += table[i].weight;
+        if (total <= 0f) return table[0].symbol;
+
+        float roll = UnityEngine.Random.value * total;
+        for (int i = 0; i < table.Length; i++)
+        {
+            roll -= table[i].weight;
+            if (roll <= 0f) return table[i].symbol;
+        }
+        return table[table.Length - 1].symbol;
     }
 }

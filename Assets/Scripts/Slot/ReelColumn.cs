@@ -12,29 +12,39 @@ public class ReelColumn : MonoBehaviour
     public Func<SymbolId, Sprite> getSprite;
     public Action<int> onReelStopped;
 
-    public SymbolId[] currentVisible = new SymbolId[SlotDef.Rows];
+    public SymbolId[] currentVisible;
     public bool isSpinning { get; private set; }
 
     float symbolHeight = 150f;
-    float spinSpeed = 2200f; // px per sec
+    int rows = 3;
+    SymbolId[] reelStrip;
 
-    public void Init(int colIdx, float symHeight, Func<SymbolId, Sprite> spriteGetter, Action<int> stopCallback)
+    public void Init(int colIdx, int rowCount, SymbolId[] strip, float symHeight,
+                     Func<SymbolId, Sprite> spriteGetter, Action<int> stopCallback)
     {
         columnIndex = colIdx;
+        rows = rowCount;
+        reelStrip = strip;
         symbolHeight = symHeight;
         getSprite = spriteGetter;
         onReelStopped = stopCallback;
 
+        currentVisible = new SymbolId[rows];
+
         // Set initial random symbols
-        for (int r = 0; r < SlotDef.Rows; r++)
-        {
-            var sym = SlotDef.ReelStrip[UnityEngine.Random.Range(0, SlotDef.ReelStrip.Length)];
-            SetSymbol(r, sym);
-        }
+        for (int r = 0; r < rows; r++)
+            SetSymbol(r, RandomStripSymbol());
+    }
+
+    SymbolId RandomStripSymbol()
+    {
+        if (reelStrip == null || reelStrip.Length == 0) return SymbolId.Ten;
+        return reelStrip[UnityEngine.Random.Range(0, reelStrip.Length)];
     }
 
     public void SetSymbol(int row, SymbolId sym)
     {
+        if (currentVisible == null || row < 0 || row >= currentVisible.Length) return;
         currentVisible[row] = sym;
         if (symbolImages != null && row < symbolImages.Length && symbolImages[row] != null)
         {
@@ -94,7 +104,7 @@ public class ReelColumn : MonoBehaviour
         // Place final symbols
         if (targetSymbols != null)
         {
-            for (int r = 0; r < SlotDef.Rows; r++)
+            for (int r = 0; r < rows && r < targetSymbols.Length; r++)
                 SetSymbol(r, targetSymbols[r]);
         }
 
@@ -117,11 +127,11 @@ public class ReelColumn : MonoBehaviour
 
     void ShiftSymbolsRandom()
     {
-        for (int r = SlotDef.Rows - 1; r > 0; r--)
+        if (currentVisible == null) return;
+        for (int r = rows - 1; r > 0; r--)
             SetSymbol(r, currentVisible[r - 1]);
 
-        var newSym = SlotDef.ReelStrip[UnityEngine.Random.Range(0, SlotDef.ReelStrip.Length)];
-        SetSymbol(0, newSym);
+        SetSymbol(0, RandomStripSymbol());
     }
 
     public void HighlightSymbol(int row, bool highlight, Color? highlightColor = null)

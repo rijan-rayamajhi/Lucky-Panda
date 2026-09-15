@@ -26,7 +26,7 @@ public static class LobbyBuilder
 
     // Dev affordance: the wheel locks for 24h and currency only goes up, so
     // testing either needs a fresh save or a very patient tester.
-    [MenuItem("Lucky Panda/Reset Player Save")]
+    [MenuItem("Lucky Panda/Dev/Reset Player Save")]
     public static void ResetPlayerSave()
     {
         PlayerPrefs.DeleteKey(GameState.SaveKey);
@@ -39,7 +39,7 @@ public static class LobbyBuilder
         Debug.Log("Player save cleared (coins, gems, level, wheel cooldown).");
     }
 
-    [MenuItem("Lucky Panda/Reset Wheel Cooldown")]
+    [MenuItem("Lucky Panda/Dev/Reset Wheel Cooldown")]
     public static void ResetWheelCooldown()
     {
         if (GameState.I != null)
@@ -70,22 +70,10 @@ public static class LobbyBuilder
         Debug.Log("Daily wheel cooldown reset. Ready to spin!");
     }
 
-    [MenuItem("Lucky Panda/Build Lobby Scene")]
+    /// Called by Lucky Panda > Build Everything, which prepares the art first.
     public static void Build()
     {
-        // Art dropped in outside the editor is not in the database yet; without
-        // this every sprite lookup below silently returns null.
-        AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
-
-        // Textures left in Multiple sprite mode resolve to an auto-slice scrap
-        // when looked up by path, which is where the stray UI fragments came
-        // from. Repair the import mode before anything loads a sprite.
-        SpriteImportOptimizer.EnsureSingleSpriteMode();
-
-        // A stale atlas hides any sprite added to Assets/Art/UI since the atlas
-        // was last packed — it renders as nothing at runtime even though the
-        // loose import is fine, since the Editor's Sprite Packer is always-on.
-        SpriteImportOptimizer.BuildAtlases();
+        if (!SlotGameBuilder.CanBuild()) return;
 
         // Only sprites still drawn 9-sliced need borders. The pills, XP bar and
         // name plate are procedural ThemedFrames now, so re-importing their old
@@ -187,15 +175,52 @@ public static class LobbyBuilder
             BuildNavBadge(i.rectTransform, navTabs[k]);
         }
 
-        // Slot Game Card (Center) — Ornate golden cloud frame with seamless composite art
-        Vector2 cardSize = new Vector2(340, 450); // Sleek proportional 3:4 tile fit (matching 1066x1408)
-        var cardImg = Img(canvasGO.transform, "PlayButton", ArtUI + "Card_Slot777.png");
-        cardImg.preserveAspect = true;
-        cardImg.raycastTarget = true;
-        Place(cardImg.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0, 15), cardSize);
+        // Game tiles — one per catalog entry, laid out in a centred row.
+        Vector2 cardSize = new Vector2(320, 422); // 3:4, matching the 1066x1408 art
+        const float cardGap = 44f;
+        float rowWidth = SlotCatalog.All.Length * cardSize.x + (SlotCatalog.All.Length - 1) * cardGap;
+        float cardStartX = -rowWidth * 0.5f + cardSize.x * 0.5f;
 
-        var play = cardImg.gameObject.AddComponent<Button>();
-        play.targetGraphic = cardImg;
+        var gameButtons = new Button[SlotCatalog.All.Length];
+        for (int g = 0; g < SlotCatalog.All.Length; g++)
+        {
+            var gameDef = SlotCatalog.All[g];
+            var tile = Panel(canvasGO.transform, gameDef.sceneName + "Tile");
+            Place(tile, new Vector2(0.5f, 0.5f),
+                  new Vector2(cardStartX + g * (cardSize.x + cardGap), 15), cardSize);
+
+            var art = Img(tile, "Art", gameDef.cardPath);
+            art.preserveAspect = false;
+            art.raycastTarget = true;
+
+            if (gameDef.cardHasBakedFrame)
+            {
+                // Its border is painted into the art; a second one would double up.
+                Stretch(art.rectTransform);
+            }
+            else
+            {
+                // Frame_SlotGame's gold line sits inside its own image — 25px of
+                // 1066 at the sides, 41/39 of 1408 top/bottom — so art stretched
+                // to the same rect spills out past the border. Inset it to the
+                // frame's window instead.
+                var artRT = art.rectTransform;
+                artRT.anchorMin = Vector2.zero;
+                artRT.anchorMax = Vector2.one;
+                artRT.offsetMin = new Vector2(cardSize.x * (25f / 1066f), cardSize.y * (39f / 1408f));
+                artRT.offsetMax = new Vector2(-cardSize.x * (25f / 1066f), -cardSize.y * (41f / 1408f));
+
+                var tileFrame = Img(tile, "FrameOverlay", ArtUI + "Frame_SlotGame.png");
+                tileFrame.preserveAspect = false;
+                tileFrame.raycastTarget = false;
+                Stretch(tileFrame.rectTransform);
+            }
+
+            // The Button sits on the tile root; clicks on the art bubble up to it.
+            var tileBtn = tile.gameObject.AddComponent<Button>();
+            tileBtn.targetGraphic = art;
+            gameButtons[g] = tileBtn;
+        }
         // Host message group: hidden offscreen, slides in only when she speaks.
         var msgRoot = Panel(canvasGO.transform, "HostMessage");
         msgRoot.anchorMin = msgRoot.anchorMax = msgRoot.pivot = new Vector2(0, 0);
@@ -285,8 +310,12 @@ public static class LobbyBuilder
         badgeButton.targetGraphic = frame;
         frame.raycastTarget = true;
         OnClick(badgeButton, ui.OnProfile);
-        OnClick(play, ui.OnPlay);
         OnClick(buy, shop.Open);
+
+        // Each tile launches its own machine. A persistent listener can't carry
+        // a lambda, so the game id rides along as a serialized int argument.
+        for (int g = 0; g < SlotCatalog.All.Length; g++)
+            OnClickInt(gameButtons[g], ui.OnPlayGameIndex, (int)SlotCatalog.All[g].id);
 
         // Ensure all SafeArea rects are saved with canonical full-stretch anchors (0,0)-(1,1)
         // so that in-editor serialization never bakes corrupted coordinates.
@@ -301,6 +330,10 @@ public static class LobbyBuilder
                 srt.offsetMax = Vector2.zero;
             }
         }
+
+        // Keep the build list complete even when only the lobby is rebuilt —
+        // the tiles check CanStreamedLevelBeLoaded against it.
+        SlotGameBuilder.RegisterScenes();
 
         EditorSceneManager.SaveScene(scene, "Assets/Scenes/Lobby.unity");
         Debug.Log("Lobby scene built.");
@@ -519,6 +552,11 @@ public static class LobbyBuilder
     static void OnClick(Button button, UnityEngine.Events.UnityAction action)
     {
         UnityEditor.Events.UnityEventTools.AddPersistentListener(button.onClick, action);
+    }
+
+    static void OnClickInt(Button button, UnityEngine.Events.UnityAction<int> action, int arg)
+    {
+        UnityEditor.Events.UnityEventTools.AddIntPersistentListener(button.onClick, action, arg);
     }
 
     // Shared popup shell: dim scrim (tap to close), ornate card, title bar,
