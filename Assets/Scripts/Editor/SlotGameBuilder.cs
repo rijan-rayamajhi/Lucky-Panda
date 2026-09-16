@@ -439,11 +439,11 @@ public static class SlotGameBuilder
         ui.autoSpinBtn = autoBtn;
         ui.autoSpinIndicator = autoDot;
         ui.autoPickerRoot = autoPicker.gameObject;
-        for (int i = 0; i < autoCounts.Length; i++)
-        {
-            int n = autoCounts[i].n;
-            autoCountBtns[i].onClick.AddListener(() => ui.PickAutoCount(n));
-        }
+        // Serialize the buttons + counts; SlotUI.Awake wires them at runtime
+        // (editor-added onClick listeners are not saved into the scene).
+        ui.autoCountButtons = autoCountBtns;
+        ui.autoCountValues = new int[autoCounts.Length];
+        for (int i = 0; i < autoCounts.Length; i++) ui.autoCountValues[i] = autoCounts[i].n;
         ui.betMinusBtn = betMinus;
         ui.betPlusBtn = betPlus;
         ui.maxBetBtn = maxBetBtn;

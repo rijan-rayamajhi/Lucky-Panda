@@ -27,6 +27,8 @@ public class SlotUI : MonoBehaviour
     public Button autoSpinBtn;
     public Image autoSpinIndicator;
     public GameObject autoPickerRoot;
+    public Button[] autoCountButtons;   // wired at runtime (editor AddListener doesn't serialize)
+    public int[] autoCountValues;       // parallel to autoCountButtons; 0 = unlimited
     public Button betMinusBtn;
     public Button betPlusBtn;
     public Button maxBetBtn;
@@ -77,6 +79,15 @@ public class SlotUI : MonoBehaviour
         if (maxBetBtn) maxBetBtn.onClick.AddListener(() => machine.SetMaxBet());
         if (backToLobbyBtn) backToLobbyBtn.onClick.AddListener(OnBackToLobbyClicked);
         if (settingsBtn && settingsPanel) settingsBtn.onClick.AddListener(settingsPanel.Open);
+
+        // The count picker buttons must be wired here at runtime — listeners
+        // added from the editor builder are not serialized into the scene.
+        if (autoCountButtons != null)
+            for (int i = 0; i < autoCountButtons.Length; i++)
+            {
+                int n = (autoCountValues != null && i < autoCountValues.Length) ? autoCountValues[i] : 0;
+                if (autoCountButtons[i]) autoCountButtons[i].onClick.AddListener(() => PickAutoCount(n));
+            }
 
         if (freeSpinsBanner) freeSpinsBanner.SetActive(false);
     }
