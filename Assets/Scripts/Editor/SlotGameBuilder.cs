@@ -356,6 +356,23 @@ public static class SlotGameBuilder
         // Big golden mechanical SPIN button
         var spinBtn = BtnPill(deck, "SpinBtn", "SPIN", new Vector2(0.5f, 0.5f), new Vector2(430, 0), actionSize);
 
+        // Auto-spin count picker — hidden until the AUTO button opens it. Sits
+        // above the deck, over the AUTO button. Buttons wired after SlotUI exists.
+        var autoPicker = Panel(safe, "AutoSpinPicker");
+        Place(autoPicker, new Vector2(0.5f, 0f), new Vector2(265, 168), new Vector2(184, 320));
+        var autoPickBg = Frame(autoPicker, "Bg", 18f, 5f, GoldBright, PillTop, PillBottom);
+        Stretch(autoPickBg.rectTransform);
+        var autoPickTitle = Label(autoPicker, "Title", "AUTO SPINS");
+        autoPickTitle.fontSize = 20;
+        autoPickTitle.color = new Color(1f, 0.85f, 0.4f, 0.9f);
+        Place(autoPickTitle.rectTransform, new Vector2(0.5f, 1f), new Vector2(0, -22), new Vector2(170, 30));
+        var autoCounts = new (string label, int n)[] { ("10", 10), ("25", 25), ("50", 50), ("UNLIMITED", 0) };
+        var autoCountBtns = new Button[autoCounts.Length];
+        for (int i = 0; i < autoCounts.Length; i++)
+            autoCountBtns[i] = BtnPill(autoPicker, "AutoN" + autoCounts[i].n, autoCounts[i].label,
+                new Vector2(0.5f, 1f), new Vector2(0, -58 - i * 62), new Vector2(160, 54));
+        autoPicker.gameObject.SetActive(false);
+
         // 8. Free Spins Banner (top banner that drops down)
         var fsBanner = Frame(safe, "FreeSpinsBanner", 24f, 6f, new Color(1f, 0.85f, 0.2f), new Color(0.6f, 0.08f, 0.05f), new Color(0.3f, 0.02f, 0.02f));
         Place(fsBanner.rectTransform, new Vector2(0.5f, 1f), new Vector2(0, -110), new Vector2(620, 64));
@@ -421,6 +438,12 @@ public static class SlotGameBuilder
         ui.spinBtn = spinBtn;
         ui.autoSpinBtn = autoBtn;
         ui.autoSpinIndicator = autoDot;
+        ui.autoPickerRoot = autoPicker.gameObject;
+        for (int i = 0; i < autoCounts.Length; i++)
+        {
+            int n = autoCounts[i].n;
+            autoCountBtns[i].onClick.AddListener(() => ui.PickAutoCount(n));
+        }
         ui.betMinusBtn = betMinus;
         ui.betPlusBtn = betPlus;
         ui.maxBetBtn = maxBetBtn;

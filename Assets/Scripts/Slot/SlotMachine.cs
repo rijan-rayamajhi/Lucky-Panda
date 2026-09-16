@@ -30,6 +30,8 @@ public class SlotMachine : MonoBehaviour
     public long CurrentBet => Def.betLadder[Mathf.Clamp(BetIndex, 0, Def.betLadder.Length - 1)];
 
     public bool IsAutoSpin { get; private set; } = false;
+    /// 0 while auto-spinning = infinite; >0 = spins left before it stops.
+    public int AutoSpinsRemaining { get; private set; } = 0;
     public int FreeSpinsRemaining { get; private set; } = 0;
     public bool IsFreeSpinsActive => FreeSpinsRemaining > 0;
 
@@ -92,21 +94,19 @@ public class SlotMachine : MonoBehaviour
         AudioManager.PlayClick();
     }
 
-    public void ToggleAutoSpin()
+    /// Start auto-spin for `count` spins (0 = infinite), from the count picker.
+    public void StartAutoSpins(int count)
     {
-        IsAutoSpin = !IsAutoSpin;
-        ui.SetAutoSpinState(IsAutoSpin);
-        AudioManager.PlayClick();
-
-        if (IsAutoSpin && State == SlotState.Idle)
-        {
-            TrySpin();
-        }
+        IsAutoSpin = true;
+        AutoSpinsRemaining = count;
+        ui.SetAutoSpinState(true);
+        if (State == SlotState.Idle) TrySpin();
     }
 
     public void StopAutoSpin()
     {
         IsAutoSpin = false;
+        AutoSpinsRemaining = 0;
         ui.SetAutoSpinState(false);
     }
 
@@ -335,6 +335,14 @@ public class SlotMachine : MonoBehaviour
         }
         else if (IsAutoSpin)
         {
+            // Count down a finite auto-spin batch and stop when it runs out.
+            if (AutoSpinsRemaining > 0)
+            {
+                AutoSpinsRemaining--;
+                ui.SetAutoSpinState(true);
+                if (AutoSpinsRemaining == 0) { StopAutoSpin(); yield break; }
+            }
+
             // A Mega/Epic win is worth stopping for rather than spinning past.
             if (tier >= WinCelebrationTier.MegaWin)
             {

@@ -12,6 +12,9 @@ public class SettingsPanel : Popup
     public TMP_Text sfxStatusText;
     public TMP_Text hapticsStatusText;
 
+    public Slider musicSlider;
+    public Slider sfxSlider;
+
     void OnEnable()
     {
         RefreshUI();
@@ -22,6 +25,8 @@ public class SettingsPanel : Popup
         if (musicToggle) musicToggle.onClick.AddListener(OnToggleMusic);
         if (sfxToggle) sfxToggle.onClick.AddListener(OnToggleSfx);
         if (hapticsToggle) hapticsToggle.onClick.AddListener(OnToggleHaptics);
+        if (musicSlider) musicSlider.onValueChanged.AddListener(v => { if (AudioManager.I != null) AudioManager.I.SetMusicVolume(v); });
+        if (sfxSlider) sfxSlider.onValueChanged.AddListener(v => { if (AudioManager.I != null) AudioManager.I.SetSfxVolume(v); });
         RefreshUI();
     }
 
@@ -62,6 +67,9 @@ public class SettingsPanel : Popup
         ApplyToggleState(musicToggle, musicStatusText, musicOn);
         ApplyToggleState(sfxToggle, sfxStatusText, sfxOn);
         ApplyToggleState(hapticsToggle, hapticsStatusText, hapticsOn);
+
+        if (musicSlider) musicSlider.SetValueWithoutNotify(am != null ? am.musicVolume : 0.65f);
+        if (sfxSlider) sfxSlider.SetValueWithoutNotify(am != null ? am.sfxVolume : 1f);
     }
 
     void ApplyToggleState(Button btn, TMP_Text label, bool on)

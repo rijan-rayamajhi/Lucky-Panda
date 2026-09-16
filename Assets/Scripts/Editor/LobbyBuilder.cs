@@ -719,18 +719,20 @@ public static class LobbyBuilder
 
     static SettingsPanel BuildSettingsPanel(Transform parent)
     {
-        var (content, panel) = BuildPanelShell<SettingsPanel>(parent, "SettingsPanel", "SETTINGS", new Vector2(880, 640));
+        var (content, panel) = BuildPanelShell<SettingsPanel>(parent, "SettingsPanel", "SETTINGS", new Vector2(880, 820));
 
         float startY = -24f;
-        float rowStep = 96f;
+        float rowStep = 92f;
 
         panel.musicToggle = BuildSettingRow(content, "MusicRow", "BACKGROUND MUSIC", startY, out panel.musicStatusText);
-        panel.sfxToggle = BuildSettingRow(content, "SfxRow", "SOUND EFFECTS", startY - rowStep, out panel.sfxStatusText);
-        panel.hapticsToggle = BuildSettingRow(content, "HapticsRow", "VIBRATION & HAPTICS", startY - rowStep * 2, out panel.hapticsStatusText);
+        panel.musicSlider = BuildSliderRow(content, "MusicVol", "MUSIC VOLUME", startY - rowStep);
+        panel.sfxToggle = BuildSettingRow(content, "SfxRow", "SOUND EFFECTS", startY - rowStep * 2, out panel.sfxStatusText);
+        panel.sfxSlider = BuildSliderRow(content, "SfxVol", "SFX VOLUME", startY - rowStep * 3);
+        panel.hapticsToggle = BuildSettingRow(content, "HapticsRow", "VIBRATION & HAPTICS", startY - rowStep * 4, out panel.hapticsStatusText);
 
-        Divider(content, "SettingsRule", startY - rowStep * 2.8f, 0.25f);
+        Divider(content, "SettingsRule", startY - rowStep * 4.8f, 0.25f);
 
-        var version = Label(content, "VersionText", "ULTRA PANDA CASINO  •  v1.0.0");
+        var version = Label(content, "VersionText", "ULTRA PANDA CASINO  -  v0.1.0");
         Place(version.rectTransform, new Vector2(0.5f, 0f), new Vector2(0, 36), new Vector2(600, 36));
         version.alignment = TextAlignmentOptions.Center;
         version.fontSize = 20;
@@ -757,6 +759,67 @@ public static class LobbyBuilder
         statusLabel = toggleBtn.GetComponentInChildren<TMP_Text>();
 
         return toggleBtn;
+    }
+
+    // A 0..1 volume slider row (label left, track right), built from Unity's
+    // builtin UI sprites so it needs no art. The Slider drives the fill/handle.
+    static UnityEngine.UI.Slider BuildSliderRow(RectTransform parent, string name, string labelText, float yPos)
+    {
+        var row = Panel(parent, name + "Row");
+        Place(row, new Vector2(0f, 1f), new Vector2(40, yPos), new Vector2(680, 72));
+        row.pivot = new Vector2(0, 1);
+
+        var title = Label(row, "Label", labelText);
+        Place(title.rectTransform, new Vector2(0, 0.5f), new Vector2(0, 0), new Vector2(320, 50));
+        title.alignment = TextAlignmentOptions.MidlineLeft;
+        title.fontSize = 26;
+        title.color = UIFactory.Cream;
+        UIFactory.Shadowed(title, 0.7f, 2f);
+
+        var sliderGO = new GameObject(name + "Slider", typeof(RectTransform));
+        sliderGO.transform.SetParent(row, false);
+        var srt = sliderGO.GetComponent<RectTransform>();
+        srt.anchorMin = srt.anchorMax = new Vector2(1f, 0.5f);
+        srt.pivot = new Vector2(1f, 0.5f);
+        srt.anchoredPosition = new Vector2(-10, 0);
+        srt.sizeDelta = new Vector2(320, 40);
+
+        var track = AssetDatabase.GetBuiltinExtraResource<Sprite>("UI/Skin/UISprite.psd");
+        var knob = AssetDatabase.GetBuiltinExtraResource<Sprite>("UI/Skin/Knob.psd");
+
+        var bg = Img(sliderGO.transform, "Background", null);
+        bg.sprite = track; bg.type = Image.Type.Sliced; bg.preserveAspect = false;
+        bg.raycastTarget = true; bg.color = new Color(0.10f, 0.07f, 0.16f, 1f);
+        var bgrt = bg.rectTransform;
+        bgrt.anchorMin = new Vector2(0, 0.35f); bgrt.anchorMax = new Vector2(1, 0.65f);
+        bgrt.offsetMin = Vector2.zero; bgrt.offsetMax = Vector2.zero;
+
+        var fillArea = Panel(sliderGO.transform, "Fill Area");
+        fillArea.anchorMin = new Vector2(0, 0.35f); fillArea.anchorMax = new Vector2(1, 0.65f);
+        fillArea.offsetMin = new Vector2(10, 0); fillArea.offsetMax = new Vector2(-10, 0);
+        var fill = Img(fillArea, "Fill", null);
+        fill.sprite = track; fill.type = Image.Type.Sliced; fill.preserveAspect = false;
+        fill.raycastTarget = false; fill.color = new Color(1f, 0.82f, 0.30f, 1f);
+        var fillrt = fill.rectTransform;
+        fillrt.anchorMin = new Vector2(0, 0); fillrt.anchorMax = new Vector2(1, 1);
+        fillrt.offsetMin = Vector2.zero; fillrt.offsetMax = Vector2.zero;
+
+        var handleArea = Panel(sliderGO.transform, "Handle Slide Area");
+        handleArea.anchorMin = new Vector2(0, 0); handleArea.anchorMax = new Vector2(1, 1);
+        handleArea.offsetMin = new Vector2(10, 0); handleArea.offsetMax = new Vector2(-10, 0);
+        var handle = Img(handleArea, "Handle", null);
+        handle.sprite = knob; handle.preserveAspect = true; handle.raycastTarget = true;
+        handle.color = Color.white;
+        var hrt = handle.rectTransform; hrt.sizeDelta = new Vector2(30, 30);
+
+        var slider = sliderGO.AddComponent<UnityEngine.UI.Slider>();
+        slider.fillRect = fillrt;
+        slider.handleRect = hrt;
+        slider.targetGraphic = handle;
+        slider.direction = UnityEngine.UI.Slider.Direction.LeftToRight;
+        slider.minValue = 0f; slider.maxValue = 1f; slider.wholeNumbers = false;
+        slider.value = 0.8f;
+        return slider;
     }
 
     // Real Shop page: a grid of coin/gem packs. Mock purchases (see ShopPack).

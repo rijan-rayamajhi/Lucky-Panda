@@ -26,6 +26,7 @@ public class SlotUI : MonoBehaviour
     public Button spinBtn;
     public Button autoSpinBtn;
     public Image autoSpinIndicator;
+    public GameObject autoPickerRoot;
     public Button betMinusBtn;
     public Button betPlusBtn;
     public Button maxBetBtn;
@@ -128,7 +129,23 @@ public class SlotUI : MonoBehaviour
 
     public void OnAutoSpinClicked()
     {
-        machine.ToggleAutoSpin();
+        AudioManager.PlayClick();
+        if (machine.IsAutoSpin) { machine.StopAutoSpin(); HideAutoPicker(); return; }
+        // Not running: toggle the count picker.
+        if (autoPickerRoot) autoPickerRoot.SetActive(!autoPickerRoot.activeSelf);
+    }
+
+    /// Chosen from the picker: start auto for `count` spins (0 = infinite).
+    public void PickAutoCount(int count)
+    {
+        AudioManager.PlayClick();
+        HideAutoPicker();
+        machine.StartAutoSpins(count);
+    }
+
+    public void HideAutoPicker()
+    {
+        if (autoPickerRoot) autoPickerRoot.SetActive(false);
     }
 
     public void OnBackToLobbyClicked()
@@ -257,7 +274,8 @@ public class SlotUI : MonoBehaviour
             var txt = autoSpinBtn.GetComponentInChildren<TMP_Text>();
             if (txt)
             {
-                txt.text = active ? "STOP" : "AUTO";
+                int left = machine != null ? machine.AutoSpinsRemaining : 0;
+                txt.text = active ? (left > 0 ? $"STOP {left}" : "STOP") : "AUTO";
                 txt.color = active ? new Color(1f, 0.3f, 0.3f) : new Color(1f, 0.84f, 0.40f);
             }
         }
