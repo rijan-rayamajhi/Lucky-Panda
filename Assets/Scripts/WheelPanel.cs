@@ -111,7 +111,7 @@ public class WheelPanel : MonoBehaviour
         // Live countdown; only rebuild the label when the whole-second value
         // changes, not every frame (was a string alloc per frame).
         bool can = CanClaim(out var wait);
-        long waitSec = (long)wait;
+        long waitSec = (long)wait.TotalSeconds;
         bool showingResult = Time.unscaledTime < resultUntil;
 
         if (can)
