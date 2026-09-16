@@ -162,7 +162,8 @@ public class SlotMachine : MonoBehaviour
         }
 
         // Start spinning all reels
-        AudioManager.PlaySpinLoop();
+        AudioManager.PlaySpinSound();
+        AudioManager.Haptic();
         for (int c = 0; c < reels.Length; c++)
         {
             reels[c].StartSpin();
@@ -171,22 +172,37 @@ public class SlotMachine : MonoBehaviour
         // Spin duration before stopping reels in cascade
         yield return new WaitForSeconds(0.6f);
 
-        // Cascade stop with delays
+        // Cascade stop with delays. Anticipation: once enough feature symbols
+        // (bonus coins for Hold & Win, scatters otherwise) have landed that the
+        // next reels could trigger the feature, the remaining reels stop slower
+        // for tension.
+        SymbolId featureSym = Def.payMode == PayMode.HoldAndWin ? Def.coinSymbol : Def.scatterSymbol;
+        int featureNeed = Def.payMode == PayMode.HoldAndWin ? Def.coinsToTriggerHold : Def.scatterCountForFreeSpins;
+        int featureSeen = 0;
         for (int c = 0; c < reels.Length; c++)
         {
             var colSymbols = new SymbolId[Def.rows];
             for (int r = 0; r < Def.rows; r++)
+            {
                 colSymbols[r] = finalOutcome[c, r];
+                if (colSymbols[r] == featureSym) featureSeen++;
+            }
 
             reels[c].RequestStop(colSymbols);
-            yield return new WaitForSeconds(0.25f);
+
+            // Reels still to stop could complete the feature, and we're within a
+            // couple of the trigger: draw out the suspense.
+            int reelsLeft = reels.Length - 1 - c;
+            bool anticipating = reelsLeft > 0 && featureNeed - featureSeen <= reelsLeft
+                                && featureSeen >= featureNeed - 2;   // within two of the trigger
+            yield return new WaitForSeconds(anticipating ? 0.7f : 0.25f);
         }
 
         // Wait until all reels have completed their bounce-back
         while (reelsStoppedCount < reels.Length)
             yield return null;
 
-        AudioManager.StopSpinLoop();
+        AudioManager.StopSpinSound();
 
         // Evaluate and present wins
         if (Def.payMode == PayMode.AnywhereCount)
@@ -256,13 +272,14 @@ public class SlotMachine : MonoBehaviour
     {
         var state = GameState.I;
         long prevCoins = state != null ? state.Data.coins : 0;
+        long credited = totalWin;   // what the player actually receives (club multiplier applied)
         bool won = false;
         if (state != null)
         {
             state.RecordSpin(bet, totalWin);
             if (totalWin > 0)
             {
-                state.AddCoins(totalWin, RewardSource.Win);
+                credited = state.AddCoins(totalWin, RewardSource.Win);
                 won = true;
             }
         }
@@ -286,13 +303,16 @@ public class SlotMachine : MonoBehaviour
 
         if (totalWin > 0)
         {
-            ui.ShowWinAmount(totalWin);
+            ui.ShowWinAmount(credited);
 
             if (tier >= WinCelebrationTier.BigWin && winPopup != null)
             {
+                // Bigger tiers get more dings + a buzz.
+                AudioManager.PlayWinCelebration((int)tier - (int)WinCelebrationTier.BigWin + 1);
+                AudioManager.Haptic();
                 State = SlotState.Celebrating;
                 bool popupDone = false;
-                winPopup.Show(tier, totalWin, () => popupDone = true);
+                winPopup.Show(tier, credited, () => popupDone = true);
                 while (!popupDone) yield return null;
             }
             else
@@ -315,8 +335,16 @@ public class SlotMachine : MonoBehaviour
         }
         else if (IsAutoSpin)
         {
-            yield return new WaitForSeconds(0.6f);
-            if (IsAutoSpin) TrySpin();
+            // A Mega/Epic win is worth stopping for rather than spinning past.
+            if (tier >= WinCelebrationTier.MegaWin)
+            {
+                StopAutoSpin();
+            }
+            else
+            {
+                yield return new WaitForSeconds(0.6f);
+                if (IsAutoSpin) TrySpin();
+            }
         }
     }
 
@@ -347,6 +375,11 @@ public class SlotMachine : MonoBehaviour
     }
 
     static readonly Color CoinGold = new Color(1f, 0.84f, 0.3f, 1f);
+
+    static string CoinLabel(CoinFace f) =>
+        f.jackpot != JackpotTier.None
+            ? f.jackpot.ToString().ToUpper()
+            : f.value.ToString("N0", System.Globalization.CultureInfo.InvariantCulture);
 
     // Hold & Win: present the base anywhere win, then — if enough collector
     // coins landed — lock them and play the coin respin bonus. The bonus is
@@ -396,7 +429,12 @@ public class SlotMachine : MonoBehaviour
         for (int c = 0; c < Def.cols; c++)
             for (int r = 0; r < Def.rows; r++)
             {
-                if (board[c, r] != null) { reels[c].SetSymbol(r, Def.coinSymbol); reels[c].HighlightSymbol(r, true, CoinGold); }
+                if (board[c, r] != null)
+                {
+                    reels[c].SetSymbol(r, Def.coinSymbol);
+                    reels[c].HighlightSymbol(r, true, CoinGold);
+                    reels[c].SetCoinLabel(r, CoinLabel(board[c, r].Value));
+                }
                 else reels[c].HighlightSymbol(r, false);
             }
         ui.ShowWinAmount(running);
@@ -413,6 +451,7 @@ public class SlotMachine : MonoBehaviour
                 board[pl.col, pl.row] = pl.face;
                 reels[pl.col].SetSymbol(pl.row, Def.coinSymbol);
                 reels[pl.col].HighlightSymbol(pl.row, true, CoinGold);
+                reels[pl.col].SetCoinLabel(pl.row, CoinLabel(pl.face));
                 running += pl.face.value;
                 if (pl.face.jackpot != JackpotTier.None) { ui.ShowJackpotAward(pl.face.jackpot); jackpotThisStep = true; }
             }

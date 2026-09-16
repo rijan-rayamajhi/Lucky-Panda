@@ -97,6 +97,8 @@ public class WheelPanel : MonoBehaviour
         }
     }
 
+    long lastWaitSec = -1;
+
     void Update()
     {
         if (spinning) return;
@@ -106,8 +108,10 @@ public class WheelPanel : MonoBehaviour
         // Input.GetKeyDown fallback threw every frame whenever the project's
         // active input handling did not match the compile define.
 
-        // Live countdown timer ticking down every frame
+        // Live countdown; only rebuild the label when the whole-second value
+        // changes, not every frame (was a string alloc per frame).
         bool can = CanClaim(out var wait);
+        long waitSec = (long)wait;
         bool showingResult = Time.unscaledTime < resultUntil;
 
         if (can)
@@ -123,8 +127,9 @@ public class WheelPanel : MonoBehaviour
         {
             if (spinButton && spinButton.interactable) spinButton.interactable = false;
 
-            if (status && !showingResult)
+            if (status && !showingResult && waitSec != lastWaitSec)
             {
+                lastWaitSec = waitSec;
                 status.text = "Next spin in " + DailyService.FormatWait(wait);
                 status.color = new Color(0.85f, 0.8f, 0.98f);
             }

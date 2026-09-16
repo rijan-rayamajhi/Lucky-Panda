@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
+using TMPro;
 
 public class ReelColumn : MonoBehaviour
 {
@@ -18,6 +19,12 @@ public class ReelColumn : MonoBehaviour
     float symbolHeight = 150f;
     int rows = 3;
     SymbolId[] reelStrip;
+
+    // Cached to avoid a per-iteration GC alloc during the continuous spin loop.
+    static readonly WaitForSeconds SpinStep = new WaitForSeconds(0.045f);
+
+    // Hold & Win coin-value labels, created lazily over each row's symbol.
+    TMP_Text[] coinLabels;
 
     public void Init(int colIdx, int rowCount, SymbolId[] strip, float symHeight,
                      Func<SymbolId, Sprite> spriteGetter, Action<int> stopCallback)
@@ -57,8 +64,47 @@ public class ReelColumn : MonoBehaviour
     public void StartSpin()
     {
         if (isSpinning) return;
+        ClearCoinLabels();
         isSpinning = true;
         StartCoroutine(SpinRoutine());
+    }
+
+    /// Show a value (or jackpot name) on the coin locked at `row`. The label is
+    /// created on first use and reused after.
+    public void SetCoinLabel(int row, string text)
+    {
+        if (row < 0 || row >= rows || symbolImages == null || row >= symbolImages.Length || symbolImages[row] == null) return;
+        if (coinLabels == null) coinLabels = new TMP_Text[rows];
+
+        var label = coinLabels[row];
+        if (label == null)
+        {
+            var go = new GameObject("CoinValue", typeof(RectTransform), typeof(TextMeshProUGUI));
+            go.transform.SetParent(symbolImages[row].transform, false);
+            var rt = (RectTransform)go.transform;
+            rt.anchorMin = Vector2.zero; rt.anchorMax = Vector2.one;
+            rt.offsetMin = Vector2.zero; rt.offsetMax = Vector2.zero;
+            label = go.GetComponent<TextMeshProUGUI>();
+            label.alignment = TextAlignmentOptions.Center;
+            label.enableAutoSizing = true;
+            label.fontSizeMin = 12; label.fontSizeMax = 34;
+            label.fontStyle = FontStyles.Bold;
+            label.color = Color.white;
+            label.raycastTarget = false;
+            var outline = go.AddComponent<Outline>();
+            outline.effectColor = new Color(0.15f, 0.05f, 0f, 0.95f);
+            outline.effectDistance = new Vector2(2, -2);
+            coinLabels[row] = label;
+        }
+        label.text = text;
+        label.gameObject.SetActive(true);
+    }
+
+    public void ClearCoinLabels()
+    {
+        if (coinLabels == null) return;
+        for (int r = 0; r < coinLabels.Length; r++)
+            if (coinLabels[r] != null) coinLabels[r].gameObject.SetActive(false);
     }
 
     SymbolId[] targetSymbols;
@@ -91,7 +137,7 @@ public class ReelColumn : MonoBehaviour
         while (!stopRequested)
         {
             ShiftSymbolsRandom();
-            yield return new WaitForSeconds(stepTime);
+            yield return SpinStep;
         }
 
         // Final sequence deceleration into target symbols
@@ -190,7 +236,9 @@ public class ReelColumn : MonoBehaviour
                 StopCoroutine("PulseRoutine");
                 StartCoroutine("PulseRoutine", img.transform);
 
-                // Add or enable a glowing outline on the winning symbol
+                // Toggle the outline the builder pre-added (fallback-add for any
+                // scene built before that change). Avoids a canvas rebuild from
+                // AddComponent on the hot win-highlight path.
                 var outline = img.GetComponent<Outline>();
                 if (outline == null) outline = img.gameObject.AddComponent<Outline>();
                 outline.enabled = true;

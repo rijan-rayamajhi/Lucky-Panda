@@ -53,9 +53,12 @@ public class GameState : MonoBehaviour
 
     // ---- currency ------------------------------------------------------
 
-    public void AddCoins(long amount, RewardSource src)
+    /// Returns the amount actually credited — Win coins are scaled by the club
+    /// multiplier here, so callers that display the win (the slot HUD) show the
+    /// real number rather than the pre-multiplier bet win.
+    public long AddCoins(long amount, RewardSource src)
     {
-        if (amount <= 0) return;
+        if (amount <= 0) return 0;
         if (src == RewardSource.Win)
             amount = (long)Math.Round(amount * (double)ClubService.CoinMultiplier);
 
@@ -74,6 +77,7 @@ public class GameState : MonoBehaviour
         // out of its own reward.
         if (won) GameEvents.Raise(GameEventType.CoinsWon, amount);
         NotifyChanged();
+        return amount;
     }
 
     public void AddGems(int amount, RewardSource src)

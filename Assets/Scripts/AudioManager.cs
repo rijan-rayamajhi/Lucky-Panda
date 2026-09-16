@@ -23,6 +23,11 @@ public class AudioManager : MonoBehaviour
     const string KeyMusic = "LuckyPanda_MusicEnabled";
     const string KeySfx = "LuckyPanda_SfxEnabled";
     const string KeyHaptics = "LuckyPanda_HapticsEnabled";
+    const string KeyMusicVol = "LuckyPanda_MusicVolume";
+    const string KeySfxVol = "LuckyPanda_SfxVolume";
+
+    public float musicVolume { get; private set; } = 0.65f;
+    public float sfxVolume { get; private set; } = 1f;
 
     public bool musicEnabled { get; private set; } = true;
     public bool sfxEnabled { get; private set; } = true;
@@ -90,6 +95,11 @@ public class AudioManager : MonoBehaviour
         musicEnabled = PlayerPrefs.GetInt(KeyMusic, 1) == 1;
         sfxEnabled = PlayerPrefs.GetInt(KeySfx, 1) == 1;
         hapticsEnabled = PlayerPrefs.GetInt(KeyHaptics, 1) == 1;
+        musicVolume = PlayerPrefs.GetFloat(KeyMusicVol, 0.65f);
+        sfxVolume = PlayerPrefs.GetFloat(KeySfxVol, 1f);
+        if (musicSource != null) musicSource.volume = musicVolume;
+        if (sfxSource != null) sfxSource.volume = sfxVolume;
+        if (spinSource != null) spinSource.volume = sfxVolume;
 
         if (musicSource != null) musicSource.mute = !musicEnabled;
         if (sfxSource != null) sfxSource.mute = !sfxEnabled;
@@ -127,6 +137,25 @@ public class AudioManager : MonoBehaviour
         PlayerPrefs.Save();
     }
 
+    /// 0..1 volume controls a settings slider can bind to. On/off mutes still
+    /// apply on top of these.
+    public void SetMusicVolume(float v)
+    {
+        musicVolume = Mathf.Clamp01(v);
+        PlayerPrefs.SetFloat(KeyMusicVol, musicVolume);
+        PlayerPrefs.Save();
+        if (musicSource != null) musicSource.volume = musicVolume;
+    }
+
+    public void SetSfxVolume(float v)
+    {
+        sfxVolume = Mathf.Clamp01(v);
+        PlayerPrefs.SetFloat(KeySfxVol, sfxVolume);
+        PlayerPrefs.Save();
+        if (sfxSource != null) sfxSource.volume = sfxVolume;
+        if (spinSource != null) spinSource.volume = sfxVolume;
+    }
+
     void Start()
     {
         HookScene();
@@ -146,7 +175,7 @@ public class AudioManager : MonoBehaviour
         if (musicClip != null)
         {
             musicSource.clip = musicClip;
-            musicSource.volume = 0.65f;
+            musicSource.volume = musicVolume;
             musicSource.loop = true;
             if (!musicSource.isPlaying)
                 musicSource.Play();
@@ -207,12 +236,12 @@ public class AudioManager : MonoBehaviour
             sfxSource.PlayOneShot(clip, volume);
     }
 
-    public static void PlaySpinLoop()
+    public static void PlaySpinSound()
     {
-        if (I != null) I.PlaySpinLoopInternal();
+        if (I != null) I.PlaySpinSoundInternal();
     }
 
-    public void PlaySpinLoopInternal()
+    public void PlaySpinSoundInternal()
     {
         if (spinSound == null)
             spinSound = Resources.Load<AudioClip>("spin");
@@ -222,7 +251,7 @@ public class AudioManager : MonoBehaviour
         spinSource.Play();
     }
 
-    public static void StopSpinLoop()
+    public static void StopSpinSound()
     {
         if (I != null && I.spinSource != null) I.spinSource.Stop();
     }
@@ -230,5 +259,31 @@ public class AudioManager : MonoBehaviour
     public static void PlayCoinGain()
     {
         if (I != null) I.PlaySound(I.coinSound);
+    }
+
+    /// Coarse device vibration, gated by the Haptics setting. Previously the
+    /// toggle saved a preference nothing ever read.
+    public static void Haptic()
+    {
+        if (I == null || !I.hapticsEnabled) return;
+#if UNITY_ANDROID || UNITY_IOS
+        if (!Application.isEditor) Handheld.Vibrate();
+#endif
+    }
+
+    /// Escalating win chime: one ding for a normal win, up to three staggered
+    /// for an Epic, so the celebration is audibly bigger for bigger wins.
+    public static void PlayWinCelebration(int dings)
+    {
+        if (I != null) I.StartCoroutine(I.WinCelebrationRoutine(dings));
+    }
+
+    System.Collections.IEnumerator WinCelebrationRoutine(int dings)
+    {
+        for (int i = 0; i < Mathf.Max(1, dings); i++)
+        {
+            PlaySound(coinSound, 1f);
+            yield return new WaitForSeconds(0.16f);
+        }
     }
 }

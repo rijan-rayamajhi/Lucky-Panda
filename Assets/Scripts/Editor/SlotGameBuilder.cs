@@ -140,7 +140,7 @@ public static class SlotGameBuilder
         var scaler = canvasGO.GetComponent<CanvasScaler>();
         scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
         scaler.referenceResolution = new Vector2(1920, 1080);
-        scaler.matchWidthOrHeight = 0.5f;
+        scaler.matchWidthOrHeight = 1f;   // match height — keeps the landscape cabinet uncropped on tall phones
 
         var eventSystem = new GameObject("EventSystem", typeof(UnityEngine.EventSystems.EventSystem));
 #if ENABLE_INPUT_SYSTEM
@@ -264,6 +264,11 @@ public static class SlotGameBuilder
                 symImg.preserveAspect = true;
                 Place(symImg.rectTransform, new Vector2(0.5f, 0.5f),
                       new Vector2(0, rowStartY - r * def.rowHeight), def.symbolSize);
+                // Pre-add a disabled outline so win highlighting toggles it
+                // rather than AddComponent-ing at runtime (canvas rebuild).
+                var outline = symImg.gameObject.AddComponent<Outline>();
+                outline.enabled = false;
+                outline.effectDistance = new Vector2(4, 4);
                 rc.symbolImages[r] = symImg;
             }
             reels[c] = rc;

@@ -49,11 +49,23 @@ public class SlotUI : MonoBehaviour
     Coroutine winRollRoutine;
     Coroutine coinGainRoutine;
 
-    // Progressive jackpot base amounts
-    double grandPool = 1_250_000;
-    double majorPool = 285_000;
-    double minorPool = 65_000;
-    double miniPool = 14_500;
+    // Progressive jackpot base amounts. Static so they keep climbing across
+    // machine visits within a session instead of resetting each scene load.
+    static double grandPool = 1_250_000;
+    static double majorPool = 285_000;
+    static double minorPool = 65_000;
+    static double miniPool = 14_500;
+
+    // Last value pushed to each ticker, so Update only formats a string when the
+    // displayed integer actually changes (was 4 GC allocs every frame).
+    long lastGrand = -1, lastMajor = -1, lastMinor = -1, lastMini = -1;
+
+    void SetTicker(TMP_Text t, ref long last, long val)
+    {
+        if (t == null || val == last) return;
+        last = val;
+        t.text = val.ToString("N0", CultureInfo.InvariantCulture);
+    }
 
     void Awake()
     {
@@ -83,18 +95,16 @@ public class SlotUI : MonoBehaviour
         }
 #endif
 
-        var c = CultureInfo.InvariantCulture;
-
         // Hold & Win jackpots are fixed bet-multiples, so the tickers show their
         // real value at the current bet rather than a growing progressive pool.
         if (machine != null && machine.Def != null && machine.Def.payMode == PayMode.HoldAndWin)
         {
             var def = machine.Def;
             long b = machine.CurrentBet;
-            if (grandText) grandText.text = ((long)def.grandBetMultiplier * b).ToString("N0", c);
-            if (majorText) majorText.text = ((long)def.majorBetMultiplier * b).ToString("N0", c);
-            if (minorText) minorText.text = ((long)def.minorBetMultiplier * b).ToString("N0", c);
-            if (miniText)  miniText.text  = ((long)def.miniBetMultiplier  * b).ToString("N0", c);
+            SetTicker(grandText, ref lastGrand, (long)def.grandBetMultiplier * b);
+            SetTicker(majorText, ref lastMajor, (long)def.majorBetMultiplier * b);
+            SetTicker(minorText, ref lastMinor, (long)def.minorBetMultiplier * b);
+            SetTicker(miniText,  ref lastMini,  (long)def.miniBetMultiplier  * b);
             return;
         }
 
@@ -104,10 +114,10 @@ public class SlotUI : MonoBehaviour
         minorPool += Time.deltaTime * 3.1;
         miniPool += Time.deltaTime * 1.2;
 
-        if (grandText) grandText.text = ((long)grandPool).ToString("N0", c);
-        if (majorText) majorText.text = ((long)majorPool).ToString("N0", c);
-        if (minorText) minorText.text = ((long)minorPool).ToString("N0", c);
-        if (miniText) miniText.text = ((long)miniPool).ToString("N0", c);
+        SetTicker(grandText, ref lastGrand, (long)grandPool);
+        SetTicker(majorText, ref lastMajor, (long)majorPool);
+        SetTicker(minorText, ref lastMinor, (long)minorPool);
+        SetTicker(miniText,  ref lastMini,  (long)miniPool);
     }
 
     public void OnSpinClicked()
@@ -230,6 +240,11 @@ public class SlotUI : MonoBehaviour
     public void SetSpinButtonInteractable(bool interactable)
     {
         if (spinBtn) spinBtn.interactable = interactable;
+        // Bet controls can't take effect mid-spin, so grey them out with the
+        // spin button rather than leaving them looking pressable.
+        if (betMinusBtn) betMinusBtn.interactable = interactable;
+        if (betPlusBtn) betPlusBtn.interactable = interactable;
+        if (maxBetBtn) maxBetBtn.interactable = interactable;
     }
 
     public void SetAutoSpinState(bool active)
