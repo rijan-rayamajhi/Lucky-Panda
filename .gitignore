@@ -43,3 +43,6 @@ sysinfo.txt
 *.apk
 *.aab
 *.unitypackage
+
+# Local build output (APK/AAB)
+/Builds/
