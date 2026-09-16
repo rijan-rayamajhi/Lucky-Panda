@@ -14,9 +14,11 @@ public class AudioManager : MonoBehaviour
     public AudioClip clickSound;
     public AudioClip musicClip;
     public AudioClip coinSound;
+    public AudioClip spinSound;
 
     AudioSource sfxSource;
     AudioSource musicSource;
+    AudioSource spinSource;
 
     const string KeyMusic = "LuckyPanda_MusicEnabled";
     const string KeySfx = "LuckyPanda_SfxEnabled";
@@ -43,6 +45,10 @@ public class AudioManager : MonoBehaviour
             {
                 I.coinSound = coinSound;
             }
+            if (spinSound != null)
+            {
+                I.spinSound = spinSound;
+            }
             Destroy(gameObject);
             return;
         }
@@ -65,6 +71,14 @@ public class AudioManager : MonoBehaviour
         musicSource.spatialBlend = 0f;
         musicSource.volume = 0.65f;
 
+        // Dedicated source for the reel-spin whoosh (a one-shot at spin start),
+        // separate so it can run under the reel-stop clicks and coin ding.
+        spinSource = gameObject.AddComponent<AudioSource>();
+        spinSource.playOnAwake = false;
+        spinSource.loop = false;
+        spinSource.spatialBlend = 0f;
+        spinSource.volume = 1.0f;
+
         if (clickSound == null)
             clickSound = Resources.Load<AudioClip>("click");
 
@@ -79,6 +93,7 @@ public class AudioManager : MonoBehaviour
 
         if (musicSource != null) musicSource.mute = !musicEnabled;
         if (sfxSource != null) sfxSource.mute = !sfxEnabled;
+        if (spinSource != null) spinSource.mute = !sfxEnabled;
     }
 
     public void SetMusicEnabled(bool enabled)
@@ -101,6 +116,8 @@ public class AudioManager : MonoBehaviour
         PlayerPrefs.Save();
         if (sfxSource != null)
             sfxSource.mute = !enabled;
+        if (spinSource != null)
+            spinSource.mute = !enabled;
     }
 
     public void SetHapticsEnabled(bool enabled)
@@ -188,6 +205,26 @@ public class AudioManager : MonoBehaviour
         if (!sfxEnabled) return;
         if (sfxSource != null && clip != null)
             sfxSource.PlayOneShot(clip, volume);
+    }
+
+    public static void PlaySpinLoop()
+    {
+        if (I != null) I.PlaySpinLoopInternal();
+    }
+
+    public void PlaySpinLoopInternal()
+    {
+        if (spinSound == null)
+            spinSound = Resources.Load<AudioClip>("spin");
+        if (!sfxEnabled || spinSource == null || spinSound == null) return;
+        spinSource.clip = spinSound;
+        spinSource.time = 0f;
+        spinSource.Play();
+    }
+
+    public static void StopSpinLoop()
+    {
+        if (I != null && I.spinSource != null) I.spinSource.Stop();
     }
 
     public static void PlayCoinGain()

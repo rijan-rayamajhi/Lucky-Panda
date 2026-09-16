@@ -26,7 +26,7 @@ public static class LobbyBuilder
 
     // Dev affordance: the wheel locks for 24h and currency only goes up, so
     // testing either needs a fresh save or a very patient tester.
-    [MenuItem("Lucky Panda/Dev/Reset Player Save")]
+    [MenuItem("Ultra Panda/Dev/Reset Player Save")]
     public static void ResetPlayerSave()
     {
         PlayerPrefs.DeleteKey(GameState.SaveKey);
@@ -39,7 +39,7 @@ public static class LobbyBuilder
         Debug.Log("Player save cleared (coins, gems, level, wheel cooldown).");
     }
 
-    [MenuItem("Lucky Panda/Dev/Reset Wheel Cooldown")]
+    [MenuItem("Ultra Panda/Dev/Reset Wheel Cooldown")]
     public static void ResetWheelCooldown()
     {
         if (GameState.I != null)
@@ -70,7 +70,7 @@ public static class LobbyBuilder
         Debug.Log("Daily wheel cooldown reset. Ready to spin!");
     }
 
-    /// Called by Lucky Panda > Build Everything, which prepares the art first.
+    /// Called by Ultra Panda > Build Everything, which prepares the art first.
     public static void Build()
     {
         if (!SlotGameBuilder.CanBuild()) return;
@@ -110,6 +110,7 @@ public static class LobbyBuilder
         am.musicClip = AssetDatabase.LoadAssetAtPath<AudioClip>("Assets/Audio/Lobby_Music.mp3");
         am.clickSound = AssetDatabase.LoadAssetAtPath<AudioClip>("Assets/Audio/mixkit-select-click-1109.wav");
         am.coinSound = AssetDatabase.LoadAssetAtPath<AudioClip>("Assets/Audio/mixkit-payout-award-ding-1935.wav");
+        am.spinSound = AssetDatabase.LoadAssetAtPath<AudioClip>("Assets/Audio/mixkit-spin-whoosh-1490.wav");
 
         // Background
         var bg = Img(canvasGO.transform, "Background", ArtBG + "BG_Lobby.png");
@@ -142,8 +143,8 @@ public static class LobbyBuilder
         var buy = HitButton(hud, "BuyButton");
         Place(buy.GetComponent<RectTransform>(), new Vector2(0.5f, 0.5f), new Vector2(0, 0), new Vector2(220, 100));
 
-        var piggy = Img(hud, "PiggyIcon", ArtUI + "Icon_Piggy.png");
-        Place(piggy.rectTransform, new Vector2(1, 0.5f), new Vector2(-168, 0), new Vector2(88, 88));
+        var piggyBtn = Btn(hud, "PiggyButton", ArtUI + "Icon_Piggy.png");
+        Place(piggyBtn.GetComponent<RectTransform>(), new Vector2(1, 0.5f), new Vector2(-168, 0), new Vector2(88, 88));
 
         var settingsBtn = Btn(hud, "SettingsButton", ArtUI + "Icon_Settings.png");
         Place(settingsBtn.GetComponent<RectTransform>(), new Vector2(1, 0.5f), new Vector2(-60, 0), new Vector2(86, 86));
@@ -299,6 +300,10 @@ public static class LobbyBuilder
         // Settings page opened by the Settings button.
         var settingsPanel = BuildSettingsPanel(canvasGO.transform);
         OnClick(settingsBtn, settingsPanel.Open);
+
+        // Piggy bank opened by the HUD piggy icon.
+        var piggyPanel = BuildPiggyPanel(canvasGO.transform);
+        OnClick(piggyBtn, piggyPanel.Open);
 
         // Shared reward celebration, and the asset handles runtime code needs.
         BuildRewardPopup(canvasGO.transform);
@@ -655,6 +660,63 @@ public static class LobbyBuilder
         return popup;
     }
 
+    static PiggyPanel BuildPiggyPanel(Transform parent)
+    {
+        var (content, panel) = BuildPanelShell<PiggyPanel>(parent, "PiggyPanel", "PIGGY BANK", new Vector2(880, 820));
+
+        var pig = Img(content, "Piggy", ArtUI + "Icon_Piggy.png");
+        pig.preserveAspect = true;
+        Place(pig.rectTransform, new Vector2(0.5f, 1f), new Vector2(0, -16), new Vector2(210, 210));
+
+        var amount = Label(content, "Amount", "0 / 500,000");
+        Place(amount.rectTransform, new Vector2(0.5f, 1f), new Vector2(0, -248), new Vector2(720, 56));
+        amount.fontSize = 38;
+        amount.enableAutoSizing = true; amount.fontSizeMin = 20; amount.fontSizeMax = 40;
+        amount.textWrappingMode = TextWrappingModes.NoWrap;
+        amount.color = new Color(1f, 0.9f, 0.5f);
+
+        // Fill bar: sliced frame with a horizontally-filled bar inside.
+        var barFrame = Img(content, "BarFrame", ArtUI + "Bar_ProgressFrame.png");
+        barFrame.type = Image.Type.Sliced;
+        barFrame.preserveAspect = false;
+        Place(barFrame.rectTransform, new Vector2(0.5f, 1f), new Vector2(0, -306), new Vector2(640, 44));
+
+        var barFill = Img(barFrame.transform, "BarFill", ArtUI + "Bar_ProgressFill.png");
+        barFill.type = Image.Type.Filled;
+        barFill.fillMethod = Image.FillMethod.Horizontal;
+        barFill.fillOrigin = (int)Image.OriginHorizontal.Left;
+        barFill.fillAmount = 0f;
+        barFill.preserveAspect = false;
+        var bfr = barFill.rectTransform;
+        bfr.anchorMin = Vector2.zero; bfr.anchorMax = Vector2.one;
+        bfr.offsetMin = new Vector2(8, 8); bfr.offsetMax = new Vector2(-8, -8);
+
+        var hint = Label(content, "Hint", "");
+        Place(hint.rectTransform, new Vector2(0.5f, 1f), new Vector2(0, -356), new Vector2(720, 76));
+        hint.fontSize = 25;
+        hint.color = new Color(0.85f, 0.82f, 0.98f);
+        hint.textWrappingMode = TextWrappingModes.Normal;
+
+        var status = Label(content, "Status", "");
+        Place(status.rectTransform, new Vector2(0.5f, 0f), new Vector2(0, 150), new Vector2(760, 46));
+        status.fontSize = 29;
+        status.color = new Color(1f, 0.92f, 0.5f);
+
+        var smash = PillButton(content, "SmashButton", "SMASH!", new Vector2(330, 92));
+        Place(smash.GetComponent<RectTransform>(), new Vector2(0.5f, 0f), new Vector2(0, 22), new Vector2(330, 92));
+        var smashLabel = smash.GetComponentInChildren<TMP_Text>();
+        OnClick(smash, panel.OnSmashClicked);
+
+        panel.amountText = amount;
+        panel.hintText = hint;
+        panel.statusText = status;
+        panel.fillBar = barFill;
+        panel.smashButton = smash;
+        panel.smashLabel = smashLabel;
+
+        return panel;
+    }
+
     static SettingsPanel BuildSettingsPanel(Transform parent)
     {
         var (content, panel) = BuildPanelShell<SettingsPanel>(parent, "SettingsPanel", "SETTINGS", new Vector2(880, 640));
@@ -668,7 +730,7 @@ public static class LobbyBuilder
 
         Divider(content, "SettingsRule", startY - rowStep * 2.8f, 0.25f);
 
-        var version = Label(content, "VersionText", "LUCKY PANDA CASINO  •  v1.0.0");
+        var version = Label(content, "VersionText", "ULTRA PANDA CASINO  •  v1.0.0");
         Place(version.rectTransform, new Vector2(0.5f, 0f), new Vector2(0, 36), new Vector2(600, 36));
         version.alignment = TextAlignmentOptions.Center;
         version.fontSize = 20;

@@ -66,7 +66,7 @@ public static class MailService
         var entry = new MailEntry
         {
             id = id,
-            sender = string.IsNullOrEmpty(sender) ? "LUCKY PANDA" : sender,
+            sender = string.IsNullOrEmpty(sender) ? "ULTRA PANDA" : sender,
             title = title,
             body = body,
             reward = reward,
@@ -83,7 +83,7 @@ public static class MailService
 
     static void SendLevelUp(int level)
     {
-        Send("lvl_" + level, "LUCKY PANDA", "LEVEL " + level + "!",
+        Send("lvl_" + level, "ULTRA PANDA", "LEVEL " + level + "!",
             "Nicely played. Rewards get bigger as you climb — keep going.",
             Reward.Of(coins: 25_000L * level, gems: 5, cardPacks: level % 5 == 0 ? 2 : 1));
     }
@@ -92,7 +92,7 @@ public static class MailService
     {
         var reward = Content.StreakReward(streak);
         if (reward.IsEmpty) return;
-        Send("streak_" + streak, "LUCKY PANDA", streak + " DAY STREAK!",
+        Send("streak_" + streak, "ULTRA PANDA", streak + " DAY STREAK!",
             "You have played " + streak + " days in a row. Here is a thank you.",
             reward);
     }

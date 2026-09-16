@@ -17,6 +17,7 @@ public static class SpriteImportOptimizer
         { "Bg_Slot777",         2048 },
         { "Bg_TripleDiamond",   2048 },
         { "Bg_FruitFortune",    2048 },
+        { "Bg_DragonGold",      2048 },
         // Large panels; 512 visibly softens their painted detail.
         { "Panel_Popup",       1024 },
         { "Panel_Popup2",      1024 },
@@ -28,10 +29,12 @@ public static class SpriteImportOptimizer
         { "Frame_Classic777",     1024 },
         { "Frame_TripleDiamond",  1024 },
         { "Frame_FruitFortune",   1024 },
+        { "Frame_DragonGold",     1024 },
         // Lobby tiles and their shared border, drawn ~320px wide.
         { "Card_Slot777",          512 },
         { "Card_TripleDiamond",    512 },
         { "Card_FruitFortune",     512 },
+        { "Card_DragonGold",       512 },
         { "Frame_SlotGame",        512 },
         // Mid-size stretched chrome.
         { "Pill_Currency",      512 },
@@ -73,7 +76,7 @@ public static class SpriteImportOptimizer
     /// budget, compression, then atlases packed from whatever is small enough
     /// to benefit. Build Everything runs this, so freshly dropped art can't
     /// ship at the wrong resolution.
-    [MenuItem("Lucky Panda/Dev/Optimize Sprite Imports")]
+    [MenuItem("Ultra Panda/Dev/Optimize Sprite Imports")]
     public static void Optimize()
     {
         int seen = 0, changed = 0;
@@ -143,7 +146,7 @@ public static class SpriteImportOptimizer
 
     // Each unatlased sprite is its own draw call; batching the UI collapses
     // the whole HUD into a couple of them.
-    [MenuItem("Lucky Panda/Dev/Rebuild Sprite Atlases")]
+    [MenuItem("Ultra Panda/Dev/Rebuild Sprite Atlases")]
     public static void BuildAtlases()
     {
         CreateAtlas("UI", "Assets/Art/UI");

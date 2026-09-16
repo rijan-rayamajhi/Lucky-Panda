@@ -7,7 +7,7 @@ using UnityEngine;
 // shortcuts. Everything here is editor-only and never ships.
 public static class DevTools
 {
-    const string Menu = "Lucky Panda/Dev/";
+    const string Menu = "Ultra Panda/Dev/";
 
     [MenuItem(Menu + "Force Day Rollover", true)]
     [MenuItem(Menu + "Grant 5 Card Packs", true)]
@@ -73,7 +73,7 @@ public static class DevTools
     // Not a test framework and not trying to be: one menu item that fails
     // loudly if the logic the features depend on stops holding. Runs in edit
     // mode against a throwaway GameState, so the real save is never touched.
-    [MenuItem("Lucky Panda/Dev/Run Self-Checks")]
+    [MenuItem("Ultra Panda/Dev/Run Self-Checks")]
     public static void RunSelfChecks()
     {
         var log = new StringBuilder();

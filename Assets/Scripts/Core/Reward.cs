@@ -6,7 +6,7 @@ using System.Text;
 // the wheel applies its own separate multiplier, and quest/mail/card/puzzle
 // payouts are fixed designed amounts. Multiplying a shop purchase would let
 // club tier inflate money the player paid for.
-public enum RewardSource { Win, Wheel, Quest, Mail, Shop, Cards, Puzzle, Club, Level, Dev }
+public enum RewardSource { Win, Wheel, Quest, Mail, Shop, Cards, Puzzle, Club, Level, Dev, Piggy }
 
 [Serializable]
 public struct Reward

@@ -15,7 +15,7 @@ public static class SlotMathCheck
     static int failures;
     static StringBuilder log;
 
-    [MenuItem("Lucky Panda/Dev/Verify Slot Math")]
+    [MenuItem("Ultra Panda/Dev/Verify Slot Math")]
     public static void Verify()
     {
         failures = 0;
@@ -59,6 +59,7 @@ public static class SlotMathCheck
     static void CheckRules(SlotGameDef def)
     {
         if (def.payMode == PayMode.AnywhereCount) { CheckAnywhereRules(def); return; }
+        if (def.payMode == PayMode.HoldAndWin) { CheckHoldAndWinRules(def); return; }
 
         // Filler: three symbols that pay nothing together and aren't any-combo
         // members, so only the middle row can win.
@@ -171,6 +172,61 @@ public static class SlotMathCheck
         else Pass($"scatters award {def.freeSpinsAwarded} free spins + {def.scatterBetMultiplier}x bet");
     }
 
+    static void CheckHoldAndWinRules(SlotGameDef def)
+    {
+        int cells = def.cols * def.rows;
+
+        if (def.coinValueTable == null || def.coinValueTable.Length == 0)
+            Fail("Hold & Win needs a coinValueTable");
+        else Pass($"coin value table has {def.coinValueTable.Length} faces");
+
+        if (def.coinsToTriggerHold < 1 || def.coinsToTriggerHold > cells)
+            Fail($"coinsToTriggerHold {def.coinsToTriggerHold} out of range 1..{cells}");
+        else Pass($"triggers at {def.coinsToTriggerHold}+ coins, {def.holdRespins} respins");
+
+        if (Array.IndexOf(def.reelStrip, def.coinSymbol) >= 0)
+            Fail("coin symbol is on the reel strip — coins must be sprinkled, not spun in");
+        if (def.payouts.ContainsKey(def.coinSymbol))
+            Fail("coin symbol has a payout — it must never pay as a normal symbol");
+
+        if (def.jackpotMiniShare + def.jackpotMinorShare > 1f)
+            Fail("jackpot Mini+Minor shares exceed 1 (Major is the remainder)");
+        else Pass($"jackpots: mini {def.miniBetMultiplier}x, minor {def.minorBetMultiplier}x, major {def.majorBetMultiplier}x, grand {def.grandBetMultiplier}x");
+
+        const long bet = 100_000;
+        long unit = bet / Mathf.Max(1, def.anywhereBetDivisor);
+
+        // Base anywhere pays still work: highest fruit at the min tier.
+        SymbolId sym = SymbolId.Dragon; int basePay = 0;
+        foreach (var kv in def.payouts) if (kv.Value > basePay) { sym = kv.Key; basePay = kv.Value; }
+        long wantMin = unit * Mathf.RoundToInt(basePay * def.AnywhereTierMult(def.anywhereMinCount));
+        var r = SlotEvaluator.Evaluate(AnywhereGrid(def, sym, def.anywhereMinCount, 0), bet, def);
+        Expect($"{def.anywhereMinCount}x {sym} base pay", r.totalWin, wantMin);
+
+        // A forced-jackpot coin draws its bet multiple. rand01 = 0 forces the
+        // jackpot branch and then the Mini share.
+        var mini = HoldAndWin.DrawCoinFace(def, bet, () => 0.0);
+        Expect("forced coin = Mini jackpot", mini.value, (long)def.miniBetMultiplier * bet);
+
+        // A full board pays every face plus the Grand.
+        var full = new CoinFace?[def.cols, def.rows];
+        long faceSum = 0;
+        for (int c = 0; c < def.cols; c++)
+            for (int rr = 0; rr < def.rows; rr++) { full[c, rr] = new CoinFace(unit); faceSum += unit; }
+        var hr = HoldAndWin.Resolve(full, bet, def, () => 1.0);
+        if (!hr.grandAwarded) Fail("a full board must award the Grand");
+        Expect("full board = faces + Grand", hr.totalWin, faceSum + (long)def.grandBetMultiplier * bet);
+
+        // Exactly-trigger board with no further lands pays just those coins.
+        var seed = new CoinFace?[def.cols, def.rows];
+        long seedSum = 0; int placed = 0;
+        for (int c = 0; c < def.cols && placed < def.coinsToTriggerHold; c++)
+            for (int rr = 0; rr < def.rows && placed < def.coinsToTriggerHold; rr++)
+            { seed[c, rr] = new CoinFace(unit); seedSum += unit; placed++; }
+        var hr2 = HoldAndWin.Resolve(seed, bet, def, () => 1.0);  // never lands more
+        Expect($"{def.coinsToTriggerHold} coins, no respin lands = coins only", hr2.totalWin, seedSum);
+    }
+
     static void CheckCatalog(SlotGameDef def)
     {
         var strip = def.reelStrip;
@@ -235,7 +291,29 @@ public static class SlotMathCheck
                 }
 
                 long win;
-                if (def.payMode == PayMode.AnywhereCount)
+                if (def.payMode == PayMode.HoldAndWin)
+                {
+                    // Mirror GenerateOutcome: sprinkle coins over the base grid,
+                    // score the base, then run the same bonus code the machine
+                    // plays. RTP here is the RTP players get.
+                    int coins = 0;
+                    for (int c = 0; c < def.cols; c++)
+                        for (int row = 0; row < def.rows; row++)
+                            if (rng.NextDouble() < def.coinBaseLandChance) { grid[c, row] = def.coinSymbol; coins++; }
+
+                    win = SlotEvaluator.Evaluate(grid, bet, def).totalWin;
+
+                    if (coins >= def.coinsToTriggerHold)
+                    {
+                        var board = new CoinFace?[def.cols, def.rows];
+                        for (int c = 0; c < def.cols; c++)
+                            for (int row = 0; row < def.rows; row++)
+                                if (grid[c, row] == def.coinSymbol)
+                                    board[c, row] = HoldAndWin.DrawCoinFace(def, bet, () => rng.NextDouble());
+                        win += HoldAndWin.Resolve(board, bet, def, () => rng.NextDouble()).totalWin;
+                    }
+                }
+                else if (def.payMode == PayMode.AnywhereCount)
                 {
                     // Same cascade code the live machine runs, so the RTP here is
                     // the RTP players get.

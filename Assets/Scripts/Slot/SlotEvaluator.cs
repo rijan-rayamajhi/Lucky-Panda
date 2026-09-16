@@ -16,10 +16,12 @@ public static class SlotEvaluator
             freeSpinsAwarded = 0
         };
 
-        if (def.payMode == PayMode.AnywhereCount)
-            EvaluateAnywhere(grid, totalBet, def, ref result);
-        else
+        // HoldAndWin base pays are counted the same way as AnywhereCount; its
+        // coin bonus is resolved separately by SlotMachine/HoldAndWin.
+        if (def.payMode == PayMode.Paylines)
             EvaluatePaylines(grid, totalBet, def, ref result);
+        else
+            EvaluateAnywhere(grid, totalBet, def, ref result);
 
         // Scatters (free spins bonus) — pay from anywhere in either mode.
         if (includeScatter)
@@ -71,7 +73,7 @@ public static class SlotEvaluator
             for (int r = 0; r < def.rows; r++)
             {
                 var s = grid[c, r];
-                if (s == def.scatterSymbol) continue;
+                if (s == def.scatterSymbol || s == def.coinSymbol) continue;
                 if (s == def.wildSymbol) { wildCoords.Add(new PaylineCoord(c, r)); continue; }
                 if (!counts.TryGetValue(s, out var list)) { list = new List<PaylineCoord>(); counts[s] = list; }
                 list.Add(new PaylineCoord(c, r));

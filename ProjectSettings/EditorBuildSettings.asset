@@ -6,6 +6,9 @@ EditorBuildSettings:
   serializedVersion: 2
   m_Scenes:
   - enabled: 1
+    path: Assets/Scenes/Boot.unity
+    guid: f8a406e669d064df1b05fd6273c821ca
+  - enabled: 1
     path: Assets/Scenes/Lobby.unity
     guid: 78d0852f526534126ad5fa60068ede49
   - enabled: 1
@@ -16,6 +19,9 @@ EditorBuildSettings:
     guid: 217cbf7d804a04ab6a440fbb0059e777
   - enabled: 1
     path: Assets/Scenes/LuckyPanda.unity
+    guid: ff24fbff293c2472b9d20392ac330f45
+  - enabled: 1
+    path: Assets/Scenes/DragonGold.unity
     guid: 00000000000000000000000000000000
   m_configObjects:
     com.unity.input.settings.actions: {fileID: -944628639613478452, guid: 2bcd2660ca9b64942af0de543d8d7100, type: 3}

@@ -22,10 +22,10 @@ public enum SymbolId
     Bar1 = 12,      // Single BAR
     Bar2 = 13,      // Double BAR
     Bar3 = 14,      // Triple BAR
-    Panda = 15,     // Triple Diamond high symbol / Lucky Panda WILD
+    Panda = 15,     // Triple Diamond high symbol / Ultra Panda WILD
     AnyBar = 16,    // Triple Diamond mixed-bar combo (result symbol only, never on a reel)
 
-    // Lucky Panda fruits (pay-anywhere). Art is currently mapped to reused
+    // Ultra Panda fruits (pay-anywhere). Art is currently mapped to reused
     // placeholder symbols in SlotCatalog — swap symbolArt for real fruit art.
     Cherry = 17,
     Lemon = 18,
@@ -33,13 +33,24 @@ public enum SymbolId
     Plum = 20,
     Grape = 21,
     Watermelon = 22,
-    Pineapple = 23
+    Pineapple = 23,
+
+    // Dragon Gold (Hold & Win). Base symbols pay via anywhere-count; Coin is
+    // the collector that triggers the coin respin bonus (it never pays as a
+    // normal symbol). Art is placeholder-mapped in SlotCatalog until real
+    // Dragon Gold art lands.
+    Dragon = 24,
+    Tiger = 25,
+    Koi = 26,
+    Lantern = 27,
+    Ingot = 28,
+    Coin = 29
 }
 
 /// How a machine scores a stopped grid. Paylines walks fixed coord lines;
 /// AnywhereCount pays any symbol that appears at least anywhereMinCount times
 /// anywhere in the grid, and drives the cascade loop.
-public enum PayMode { Paylines, AnywhereCount }
+public enum PayMode { Paylines, AnywhereCount, HoldAndWin }
 
 /// Count tier for AnywhereCount pay: at `minCount` or more matching symbols the
 /// base payout is multiplied by `mult`. Tiers are stored highest-count first.
@@ -49,6 +60,28 @@ public struct AnywherePayTier
     public int minCount;
     public float mult;
     public AnywherePayTier(int c, float m) { minCount = c; mult = m; }
+}
+
+/// Hold & Win jackpot rungs. Mini/Minor/Major can land on a coin; Grand is
+/// awarded only for filling every cell.
+public enum JackpotTier { None, Mini, Minor, Major, Grand }
+
+/// One Hold & Win coin face: a cash value, or a fixed jackpot. `value` already
+/// holds the cash for a jackpot face too, so summing faces gives the win.
+public struct CoinFace
+{
+    public long value;
+    public JackpotTier jackpot;   // None for a plain cash coin
+    public CoinFace(long v, JackpotTier j = JackpotTier.None) { value = v; jackpot = j; }
+}
+
+/// Weighted cash face for the Hold & Win coin draw: pays `credits` * betUnit.
+[Serializable]
+public struct WeightedCoin
+{
+    public int credits;
+    public float weight;
+    public WeightedCoin(int c, float w) { credits = c; weight = w; }
 }
 
 [Serializable]
@@ -100,7 +133,8 @@ public enum SlotGameId
 {
     Classic777 = 0,
     TripleDiamond = 1,
-    LuckyPanda = 2
+    LuckyPanda = 2,
+    DragonGold = 3
 }
 
 /// Everything that makes one slot machine different from another. The machine,
@@ -141,6 +175,37 @@ public class SlotGameDef
     /// False hides the progressive jackpot ticker row (a 3-reel convention) and
     /// frees that strip for the cascade multiplier display.
     public bool showJackpotRow = true;
+
+    // ---- Hold & Win (coin respin / link) -------------------------------
+    /// Collector coin. Landing coinsToTriggerHold of them anywhere starts the
+    /// respin bonus; the coin never pays as a normal symbol (no payouts entry).
+    public SymbolId coinSymbol = SymbolId.Coin;
+    public int coinsToTriggerHold = 6;
+    public int holdRespins = 3;
+    /// Per-empty-cell chance a coin lands, on a base spin and on a respin.
+    /// These plus coinValueTable are the Hold & Win RTP knobs the balance sim
+    /// tunes. Coin cash uses betUnit = totalBet / anywhereBetDivisor.
+    public float coinBaseLandChance = 0.125f;
+    public float coinRespinLandChance = 0.11f;
+    public WeightedCoin[] coinValueTable;
+    /// Chance a landed coin is a fixed jackpot instead of cash, and the split
+    /// among Mini/Minor/Major (Major is the remainder). Grand is board-full only.
+    public float jackpotCoinChance = 0.012f;
+    public float jackpotMiniShare = 0.80f;
+    public float jackpotMinorShare = 0.16f;
+    public int miniBetMultiplier = 15;
+    public int minorBetMultiplier = 60;
+    public int majorBetMultiplier = 250;
+    public int grandBetMultiplier = 500;
+
+    public int JackpotBetMultiplier(JackpotTier t) => t switch
+    {
+        JackpotTier.Mini => miniBetMultiplier,
+        JackpotTier.Minor => minorBetMultiplier,
+        JackpotTier.Major => majorBetMultiplier,
+        JackpotTier.Grand => grandBetMultiplier,
+        _ => 0
+    };
 
     // ---- paytable ------------------------------------------------------
     public Dictionary<SymbolId, int> payouts;
@@ -415,7 +480,7 @@ public static class SlotCatalog
         dividerHeight = 320f,
     };
 
-    // Lucky Panda: Fruit Fortune — a wide 7x3 pay-anywhere cascade machine.
+    // Ultra Panda: Fruit Fortune — a wide 7x3 pay-anywhere cascade machine.
     // PLACEHOLDER ART: background/card reuse Triple Diamond art, the frame
     // overlay is omitted (no wide-window frame exists yet), and each fruit maps
     // to an existing distinct symbol sprite. Replace backgroundPath, cardPath,
@@ -423,7 +488,7 @@ public static class SlotCatalog
     public static readonly SlotGameDef LuckyPanda = new SlotGameDef
     {
         id = SlotGameId.LuckyPanda,
-        displayName = "LUCKY PANDA",
+        displayName = "ULTRA PANDA",
         sceneName = "LuckyPanda",
 
         cols = 7,
@@ -522,7 +587,137 @@ public static class SlotCatalog
         dividerHeight = 372f,
     };
 
-    public static readonly SlotGameDef[] All = { Classic777, TripleDiamond, LuckyPanda };
+    // Dragon Gold: Ultra Panda — a 5x3 Hold & Win (coin respin / link) machine.
+    // Base game pays via anywhere-count (like Ultra Panda but no cascade); the
+    // marquee feature is the coin bonus: land 6+ Dragon Coins to lock them and
+    // respin for coin values and Mini/Minor/Major/Grand jackpots.
+    // Art is bespoke Dragon Gold (dragon/tiger/koi/lantern/ingot symbols, a
+    // gold-coin collector, a twin-dragon 5x3 frame). RTP/jackpot balance is
+    // tuned by Verify Slot Math via anywhereBetDivisor, payouts, coin land
+    // chances and the coin/jackpot value tables (sim ~817% return, bonus ~1 in
+    // 140 spins).
+    public static readonly SlotGameDef DragonGold = new SlotGameDef
+    {
+        id = SlotGameId.DragonGold,
+        displayName = "DRAGON GOLD",
+        sceneName = "DragonGold",
+
+        cols = 5,
+        rows = 3,
+        paylines = null,            // anywhere-count base, no lines
+        betLadder = StandardBetLadder,
+
+        payMode = PayMode.HoldAndWin,
+        anywhereMinCount = 6,
+        anywhereBetDivisor = 1,     // base pay unit = total bet (tuned to ~764% base)
+        anywherePayTiers = new[]
+        {
+            new AnywherePayTier(10, 3.0f),
+            new AnywherePayTier(8,  1.6f),
+            new AnywherePayTier(6,  1.0f),
+        },
+        // No cascade: base is a single evaluation. Ladder still starts at 1 so
+        // the math check's "ladder[0] must be 1" rule holds.
+        cascadeMultiplierLadder = new[] { 1 },
+        maxCascades = 1,
+        showJackpotRow = false,     // no ticker row — the dragon frame stands alone
+
+        // Base payout per symbol at the 6+ tier. Commons pay little, Dragon most.
+        payouts = new Dictionary<SymbolId, int>
+        {
+            { SymbolId.Dragon,  74 },
+            { SymbolId.Tiger,   49 },
+            { SymbolId.Koi,     29 },
+            { SymbolId.Lantern, 20 },
+            { SymbolId.Ingot,   15 },
+        },
+
+        wildSymbol = SymbolId.Wild,   // substitutes for any base symbol
+        wildLineMultiplier = 1,
+        anyComboMultiplier = 0,
+
+        // No scatter free-spins feature — the coin bonus is the feature. Scatter
+        // is not on the strip, so it never triggers.
+        scatterSymbol = SymbolId.Scatter,
+        scatterCountForFreeSpins = 99,
+        freeSpinsAwarded = 0,
+        scatterBetMultiplier = 0,
+        freeSpinWinMultiplier = 1,
+
+        guaranteedWinChance = 0f,
+        winFavorTable = null,
+
+        // ---- Hold & Win config ----
+        coinSymbol = SymbolId.Coin,
+        coinsToTriggerHold = 6,
+        holdRespins = 3,
+        coinBaseLandChance = 0.125f,
+        coinRespinLandChance = 0.11f,
+        coinValueTable = new[]
+        {
+            new WeightedCoin(1,  44f),
+            new WeightedCoin(2,  28f),
+            new WeightedCoin(3,  14f),
+            new WeightedCoin(5,   8f),
+            new WeightedCoin(8,   4f),
+            new WeightedCoin(15,  2f),
+            new WeightedCoin(40,  1f),
+        },
+        jackpotCoinChance = 0.012f,
+        jackpotMiniShare = 0.80f,
+        jackpotMinorShare = 0.16f,
+        miniBetMultiplier = 15,
+        minorBetMultiplier = 60,
+        majorBetMultiplier = 250,
+        grandBetMultiplier = 500,
+
+        // 30 stops, no adjacent duplicates. Commons (Ingot/Lantern) dense so the
+        // 6+ anywhere tiers fire; Dragon and Wild rare. Coin is NOT on the strip
+        // — coins are sprinkled by coinBaseLandChance in GenerateOutcome.
+        reelStrip = new[]
+        {
+            SymbolId.Ingot, SymbolId.Lantern, SymbolId.Koi, SymbolId.Ingot, SymbolId.Tiger,
+            SymbolId.Lantern, SymbolId.Dragon, SymbolId.Ingot, SymbolId.Koi, SymbolId.Lantern,
+            SymbolId.Ingot, SymbolId.Wild, SymbolId.Koi, SymbolId.Tiger, SymbolId.Ingot,
+            SymbolId.Lantern, SymbolId.Dragon, SymbolId.Koi, SymbolId.Ingot, SymbolId.Lantern,
+            SymbolId.Tiger, SymbolId.Ingot, SymbolId.Koi, SymbolId.Wild, SymbolId.Lantern,
+            SymbolId.Dragon, SymbolId.Ingot, SymbolId.Tiger, SymbolId.Lantern, SymbolId.Koi
+        },
+
+        backgroundPath = BG + "Bg_DragonGold.png",
+        framePath = UI + "Frame_DragonGold.png",
+        cardPath = UI + "Card_DragonGold.png",
+        cardHasBakedFrame = false,
+        symbolArt = new Dictionary<SymbolId, string>
+        {
+            { SymbolId.Dragon,  Sym + "Sym_Dragon.png" },
+            { SymbolId.Tiger,   Sym + "Sym_Tiger.png" },
+            { SymbolId.Koi,     Sym + "Sym_Koi.png" },
+            { SymbolId.Lantern, Sym + "Sym_Lantern.png" },
+            { SymbolId.Ingot,   Sym + "Sym_Ingot.png" },
+            { SymbolId.Wild,    Sym + "Sym_Wild.png" },   // shared wild sprite
+            { SymbolId.Coin,    Sym + "Sym_DragonCoin.png" },  // flat inner ring holds the value
+        },
+
+        // Frame_DragonGold is 1536x1024 (aspect 1.5); its transparent opening
+        // measures 67.3% W x 43.8% H, centred, sitting 36px (image space) below
+        // the frame centre. At a 1200x800 cabinet that is an ~806x350 window at
+        // y=-28. The velvet backdrop is sized past it so it fills to the gold
+        // border with no scene showing through; the frame overlay hides the
+        // overhang. Grid: pitch 161 puts outer columns at +/-322 (~21px clear of
+        // the 403-half window); row pitch 116 gives ~9px top/bottom clearance.
+        cabinetSize = new Vector2(1200, 800),
+        backdropSize = new Vector2(846, 396),
+        reelWindowSize = new Vector2(806, 350),
+        reelWindowY = -28f,
+        colWidth = 150f,
+        colSpacing = 11f,
+        rowHeight = 106f,
+        symbolSize = new Vector2(120, 120),
+        dividerHeight = 330f,
+    };
+
+    public static readonly SlotGameDef[] All = { Classic777, TripleDiamond, LuckyPanda, DragonGold };
 
     public static SlotGameDef Get(SlotGameId id)
     {

@@ -213,15 +213,15 @@ public static class Content
 
     public static readonly NewsDef[] News =
     {
-        new NewsDef { id = "n_welcome", afterDays = 0, sender = "LUCKY PANDA", title = "WELCOME!",
+        new NewsDef { id = "n_welcome", afterDays = 0, sender = "ULTRA PANDA", title = "WELCOME!",
             body = "Thanks for playing. Here is something to get you started — spin the daily wheel every day for more.",
             reward = Reward.Of(coins: 50_000, gems: 10) },
 
-        new NewsDef { id = "n_cards", afterDays = 1, sender = "LUCKY PANDA", title = "START COLLECTING",
+        new NewsDef { id = "n_cards", afterDays = 1, sender = "ULTRA PANDA", title = "START COLLECTING",
             body = "Card packs drop from quests, the wheel and levelling up. Finish a set for a big payout.",
             reward = Reward.Of(cardPacks: 2) },
 
-        new NewsDef { id = "n_puzzle", afterDays = 3, sender = "LUCKY PANDA", title = "PIECE IT TOGETHER",
+        new NewsDef { id = "n_puzzle", afterDays = 3, sender = "ULTRA PANDA", title = "PIECE IT TOGETHER",
             body = "Puzzle pieces come from quests and completed card sets. Fill the board to win the jackpot.",
             reward = Reward.Of(puzzlePieces: 2, coins: 50_000) },
 
@@ -229,7 +229,7 @@ public static class Content
             body = "Club points build with everything you play. Higher tiers pay bigger wheel rewards and a daily gem stipend.",
             reward = Reward.Of(clubPoints: 500, coins: 75_000) },
 
-        new NewsDef { id = "n_week1", afterDays = 7, sender = "LUCKY PANDA", title = "ONE WEEK IN",
+        new NewsDef { id = "n_week1", afterDays = 7, sender = "ULTRA PANDA", title = "ONE WEEK IN",
             body = "A week of spins. Here is a thank you from all of us at the bamboo table.",
             reward = Reward.Of(coins: 250_000, gems: 50, cardPacks: 2) }
     };

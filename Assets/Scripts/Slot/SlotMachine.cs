@@ -150,7 +150,9 @@ public class SlotMachine : MonoBehaviour
         // Determine final outcome. Cascade games resolve after the reels stop
         // (the chain runs on the shown grid), so only payline games pre-evaluate.
         finalOutcome = GenerateOutcome();
-        if (Def.payMode == PayMode.Paylines)
+        // Paylines and Hold & Win both score the shown grid in one evaluation;
+        // only AnywhereCount runs the post-stop cascade chain.
+        if (Def.payMode != PayMode.AnywhereCount)
         {
             lastEvaluation = SlotEvaluator.Evaluate(finalOutcome, bet, Def);
 
@@ -160,6 +162,7 @@ public class SlotMachine : MonoBehaviour
         }
 
         // Start spinning all reels
+        AudioManager.PlaySpinLoop();
         for (int c = 0; c < reels.Length; c++)
         {
             reels[c].StartSpin();
@@ -183,9 +186,13 @@ public class SlotMachine : MonoBehaviour
         while (reelsStoppedCount < reels.Length)
             yield return null;
 
+        AudioManager.StopSpinLoop();
+
         // Evaluate and present wins
         if (Def.payMode == PayMode.AnywhereCount)
             yield return StartCoroutine(PresentCascadeRoutine(bet));
+        else if (Def.payMode == PayMode.HoldAndWin)
+            yield return StartCoroutine(PresentHoldAndWinRoutine(bet));
         else
             yield return StartCoroutine(PresentWinsRoutine(bet));
     }
@@ -339,6 +346,124 @@ public class SlotMachine : MonoBehaviour
         done();
     }
 
+    static readonly Color CoinGold = new Color(1f, 0.84f, 0.3f, 1f);
+
+    // Hold & Win: present the base anywhere win, then — if enough collector
+    // coins landed — lock them and play the coin respin bonus. The bonus is
+    // resolved up front (HoldAndWin.Resolve, the same code the balance sim runs)
+    // and played back step by step before the total is credited.
+    IEnumerator PresentHoldAndWinRoutine(long bet)
+    {
+        State = SlotState.Evaluating;
+
+        long baseWin = lastEvaluation.totalWin;
+        if (baseWin > 0) HighlightAnywhereWins(lastEvaluation);
+
+        int coinCount = 0;
+        for (int c = 0; c < Def.cols; c++)
+            for (int r = 0; r < Def.rows; r++)
+                if (finalOutcome[c, r] == Def.coinSymbol) coinCount++;
+
+        // Not enough coins — settle the base win like a normal spin.
+        if (coinCount < Def.coinsToTriggerHold)
+        {
+            yield return StartCoroutine(FinishSpin(bet, baseWin, lastEvaluation.tier, false, 0));
+            yield break;
+        }
+
+        if (baseWin > 0) { ui.ShowWinAmount(baseWin); yield return new WaitForSeconds(0.6f); }
+        ResetSymbolHighlights();
+
+        System.Func<double> rand01 = () => (double)UnityEngine.Random.value;
+
+        // Seed the board with the triggering coins' faces and resolve the bonus.
+        var board = new CoinFace?[Def.cols, Def.rows];
+        long running = baseWin;
+        for (int c = 0; c < Def.cols; c++)
+            for (int r = 0; r < Def.rows; r++)
+                if (finalOutcome[c, r] == Def.coinSymbol)
+                {
+                    var face = HoldAndWin.DrawCoinFace(Def, bet, rand01);
+                    board[c, r] = face;
+                    running += face.value;
+                }
+
+        var seeded = (CoinFace?[,])board.Clone();
+        var hold = HoldAndWin.Resolve(seeded, bet, Def, rand01);
+
+        // Lock: coins glow gold, every other cell dims.
+        ui.ShowHoldBanner(Def.holdRespins);
+        for (int c = 0; c < Def.cols; c++)
+            for (int r = 0; r < Def.rows; r++)
+            {
+                if (board[c, r] != null) { reels[c].SetSymbol(r, Def.coinSymbol); reels[c].HighlightSymbol(r, true, CoinGold); }
+                else reels[c].HighlightSymbol(r, false);
+            }
+        ui.ShowWinAmount(running);
+        yield return new WaitForSeconds(0.9f);
+
+        // Play each respin: flourish the empty cells, then reveal any new coins.
+        foreach (var step in hold.steps)
+        {
+            yield return StartCoroutine(RespinEmptyCells(board));
+
+            bool jackpotThisStep = false;
+            foreach (var pl in step.newCoins)
+            {
+                board[pl.col, pl.row] = pl.face;
+                reels[pl.col].SetSymbol(pl.row, Def.coinSymbol);
+                reels[pl.col].HighlightSymbol(pl.row, true, CoinGold);
+                running += pl.face.value;
+                if (pl.face.jackpot != JackpotTier.None) { ui.ShowJackpotAward(pl.face.jackpot); jackpotThisStep = true; }
+            }
+
+            ui.ShowWinAmount(running);
+            AudioManager.PlayClick();
+            if (jackpotThisStep) yield return new WaitForSeconds(0.9f);
+            ui.UpdateRespins(step.respinsLeft);
+            yield return new WaitForSeconds(step.newCoins.Count > 0 ? 0.5f : 0.35f);
+        }
+
+        if (hold.grandAwarded)
+        {
+            ui.ShowJackpotAward(JackpotTier.Grand);
+            running += hold.grandValue;
+            ui.ShowWinAmount(running);
+            yield return new WaitForSeconds(1.2f);
+        }
+        ui.HideHoldBanner();
+
+        long totalWin = baseWin + hold.totalWin;
+        float m = (float)totalWin / Mathf.Max(1, bet);
+        var tier = totalWin <= 0 ? WinCelebrationTier.None
+            : m >= 50f ? WinCelebrationTier.EpicWin
+            : m >= 25f ? WinCelebrationTier.MegaWin
+            : m >= 10f ? WinCelebrationTier.BigWin
+            : WinCelebrationTier.Normal;
+
+        yield return StartCoroutine(FinishSpin(bet, totalWin, tier, false, 0));
+    }
+
+    // Brief spin flourish on the cells that have no coin locked, then leave them
+    // dimmed. Purely cosmetic — the coins and payout come from the resolver.
+    IEnumerator RespinEmptyCells(CoinFace?[,] board)
+    {
+        var strip = Def.reelStrip;
+        int len = strip.Length;
+        for (int t = 0; t < 4; t++)
+        {
+            for (int c = 0; c < Def.cols; c++)
+                for (int r = 0; r < Def.rows; r++)
+                    if (board[c, r] == null)
+                        reels[c].SetSymbol(r, strip[UnityEngine.Random.Range(0, len)]);
+            yield return new WaitForSeconds(0.06f);
+        }
+        for (int c = 0; c < Def.cols; c++)
+            for (int r = 0; r < Def.rows; r++)
+                if (board[c, r] == null)
+                    reels[c].HighlightSymbol(r, false);
+    }
+
     void HighlightAnywhereWins(SpinEvaluationResult eval)
     {
         for (int c = 0; c < Def.cols && c < reels.Length; c++)
@@ -405,6 +530,18 @@ public class SlotMachine : MonoBehaviour
                 int idx = (centerIdx + r - 1 + stripLen) % stripLen;
                 grid[c, r] = strip[idx];
             }
+        }
+
+        // Hold & Win: sprinkle collector coins over the base grid. They overwrite
+        // the base symbol (so they don't count toward an anywhere win) and 6+ of
+        // them trigger the coin respin bonus. coinBaseLandChance is a Hold & Win
+        // RTP knob tuned by Verify Slot Math.
+        if (Def.payMode == PayMode.HoldAndWin)
+        {
+            for (int c = 0; c < Def.cols; c++)
+                for (int r = 0; r < Def.rows; r++)
+                    if (UnityEngine.Random.value < Def.coinBaseLandChance)
+                        grid[c, r] = Def.coinSymbol;
         }
 
         // Nudge a share of spins into a guaranteed line win so the game stays

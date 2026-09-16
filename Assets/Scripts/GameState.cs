@@ -35,6 +35,7 @@ public class GameState : MonoBehaviour
         // gifts, so it must be listening before anything can raise one.
         MailService.Init();
         ClubService.Init();
+        PiggyService.Init();
         QuestService.Init();
         PuzzleService.Init();
         CardService.Init();

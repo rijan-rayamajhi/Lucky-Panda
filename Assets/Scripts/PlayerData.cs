@@ -21,6 +21,8 @@ public class PlayerData
     public int gems = 150;
     public long bet = 5_000;
 
+    public long piggyBalance;   // savings pot; fills from bets, smash to collect
+
     public int totalSpins;
     public long totalWon;
     public long biggestWin;

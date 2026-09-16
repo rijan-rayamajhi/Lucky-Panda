@@ -15,34 +15,40 @@ public static class SlotGameBuilder
     static readonly Color PillTop       = new Color(0.12f, 0.09f, 0.16f, 0.96f);
     static readonly Color PillBottom    = new Color(0.05f, 0.03f, 0.08f, 0.96f);
 
-    [MenuItem("Lucky Panda/Open Scene/Lobby")]
+    [MenuItem("Ultra Panda/Open Scene/Lobby")]
     public static void OpenLobbyScene()
     {
         EditorSceneManager.OpenScene("Assets/Scenes/Lobby.unity");
     }
 
-    [MenuItem("Lucky Panda/Open Scene/Classic 777")]
+    [MenuItem("Ultra Panda/Open Scene/Classic 777")]
     public static void OpenSlotGameScene()
     {
         EditorSceneManager.OpenScene(SlotCatalog.Classic777.ScenePath);
     }
 
-    [MenuItem("Lucky Panda/Open Scene/Triple Diamond")]
+    [MenuItem("Ultra Panda/Open Scene/Triple Diamond")]
     public static void OpenTripleDiamondScene()
     {
         EditorSceneManager.OpenScene(SlotCatalog.TripleDiamond.ScenePath);
     }
 
-    [MenuItem("Lucky Panda/Open Scene/Lucky Panda")]
+    [MenuItem("Ultra Panda/Open Scene/Ultra Panda")]
     public static void OpenLuckyPandaScene()
     {
         EditorSceneManager.OpenScene(SlotCatalog.LuckyPanda.ScenePath);
     }
 
+    [MenuItem("Ultra Panda/Open Scene/Dragon Gold")]
+    public static void OpenDragonGoldScene()
+    {
+        EditorSceneManager.OpenScene(SlotCatalog.DragonGold.ScenePath);
+    }
+
     /// The one build command: fix up the art imports once, then regenerate the
     /// lobby and every machine. Rebuilding one scene at a time invited the two
     /// halves to drift apart.
-    [MenuItem("Lucky Panda/Build Everything")]
+    [MenuItem("Ultra Panda/Build Everything")]
     public static void BuildEverything()
     {
         if (!CanBuild()) return;
@@ -50,10 +56,11 @@ public static class SlotGameBuilder
         AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
         SpriteImportOptimizer.Optimize();
 
+        BuildBootScene();
         foreach (var d in SlotCatalog.All) BuildGame(d);
         LobbyBuilder.Build();
 
-        Debug.Log($"Built the lobby and {SlotCatalog.All.Length} machine(s). Open a scene from Lucky Panda > Open Scene.");
+        Debug.Log($"Built the lobby and {SlotCatalog.All.Length} machine(s). Open a scene from Ultra Panda > Open Scene.");
     }
 
     /// Scene building replaces the open scene, which Unity forbids in play mode
@@ -63,6 +70,61 @@ public static class SlotGameBuilder
         if (!EditorApplication.isPlayingOrWillChangePlaymode) return true;
         Debug.LogError("Stop play mode before building scenes.");
         return false;
+    }
+
+    [MenuItem("Ultra Panda/Open Scene/Boot")]
+    public static void OpenBootScene()
+    {
+        EditorSceneManager.OpenScene("Assets/Scenes/Boot.unity");
+    }
+
+    // The launch/loading screen: full-screen splash art with a progress bar over
+    // the banner, which async-loads the Lobby. Set as build index 0.
+    public static void BuildBootScene()
+    {
+        if (!CanBuild()) return;
+
+        var scene = EditorSceneManager.NewScene(NewSceneSetup.DefaultGameObjects, NewSceneMode.Single);
+
+        var canvasGO = new GameObject("Canvas", typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
+        canvasGO.GetComponent<Canvas>().renderMode = RenderMode.ScreenSpaceOverlay;
+        var scaler = canvasGO.GetComponent<CanvasScaler>();
+        scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+        scaler.referenceResolution = new Vector2(1920, 1080);
+        scaler.matchWidthOrHeight = 1f;   // cover by height (landscape)
+
+        new GameObject("EventSystem", typeof(UnityEngine.EventSystems.EventSystem));
+
+        // Full-screen splash.
+        var splash = Img(canvasGO.transform, "Splash", "Assets/Art/Branding/SplashLoading.png");
+        splash.preserveAspect = false;
+        Stretch(splash.rectTransform);
+
+        // Progress bar over the bottom-centre banner. Track + gold fill.
+        var track = Img(canvasGO.transform, "BarTrack", null);
+        track.sprite = AssetDatabase.GetBuiltinExtraResource<Sprite>("UI/Skin/UISprite.psd");
+        track.type = Image.Type.Sliced;
+        track.color = new Color(0f, 0f, 0f, 0.45f);
+        Place(track.rectTransform, new Vector2(0.5f, 0f), new Vector2(0, 150), new Vector2(720, 34));
+
+        var fill = Img(track.transform, "BarFill", null);
+        fill.sprite = AssetDatabase.GetBuiltinExtraResource<Sprite>("UI/Skin/UISprite.psd");
+        fill.type = Image.Type.Filled;
+        fill.fillMethod = Image.FillMethod.Horizontal;
+        fill.fillOrigin = (int)Image.OriginHorizontal.Left;
+        fill.fillAmount = 0f;
+        fill.color = new Color(1f, 0.82f, 0.3f, 1f);
+        var fr = fill.rectTransform;
+        fr.anchorMin = Vector2.zero; fr.anchorMax = Vector2.one;
+        fr.offsetMin = new Vector2(4, 4); fr.offsetMax = new Vector2(-4, -4);
+
+        var ls = canvasGO.AddComponent<LoadingScreen>();
+        ls.fillBar = fill;
+        ls.nextScene = "Lobby";
+
+        RegisterScenes();
+        EditorSceneManager.SaveScene(scene, "Assets/Scenes/Boot.unity");
+        Debug.Log("Boot loading scene built at Assets/Scenes/Boot.unity");
     }
 
     public static void BuildGame(SlotGameDef def)
@@ -93,6 +155,7 @@ public static class SlotGameBuilder
         am.musicClip = AssetDatabase.LoadAssetAtPath<AudioClip>("Assets/Audio/Lobby_Music.mp3");
         am.clickSound = AssetDatabase.LoadAssetAtPath<AudioClip>("Assets/Audio/mixkit-select-click-1109.wav");
         am.coinSound = AssetDatabase.LoadAssetAtPath<AudioClip>("Assets/Audio/mixkit-payout-award-ding-1935.wav");
+        am.spinSound = AssetDatabase.LoadAssetAtPath<AudioClip>("Assets/Audio/mixkit-spin-whoosh-1490.wav");
 
         // 2. Background
         var bg = Img(canvasGO.transform, "Background", def.backgroundPath);
@@ -142,8 +205,11 @@ public static class SlotGameBuilder
             minorText = JackpotPlate(jackpots, "MINOR", ArtUI + "Bar_Minor.png", "65,000");
             miniText  = JackpotPlate(jackpots, "MINI",  ArtUI + "Bar_Mini.png",  "14,500");
         }
-        else
+        else if (def.payMode == PayMode.AnywhereCount)
         {
+            // Cascade machines use this strip for the chain multiplier. Hold & Win
+            // shows no header row — its ornate frame stands alone and the stray
+            // ticker plates overflowed behind that frame's tall crest.
             var multStrip = Frame(safe, "ChainMultiplierStrip", 22f, 5f, GoldBright, PillTop, PillBottom);
             Place(multStrip.rectTransform, new Vector2(0.5f, 1f), new Vector2(0, -96), new Vector2(360, 62));
             var multTitle = Label(multStrip.transform, "Title", "MULTIPLIER");
@@ -388,11 +454,13 @@ public static class SlotGameBuilder
         Debug.Log($"{def.displayName} scene built at {def.ScenePath}");
     }
 
-    /// Lobby first (it is the entry scene), then one scene per catalog game.
+    /// Boot (the launch/loading screen) first, then the Lobby, then one scene
+    /// per catalog game.
     internal static void RegisterScenes()
     {
         var list = new System.Collections.Generic.List<EditorBuildSettingsScene>
         {
+            new EditorBuildSettingsScene("Assets/Scenes/Boot.unity", true),
             new EditorBuildSettingsScene("Assets/Scenes/Lobby.unity", true)
         };
         foreach (var d in SlotCatalog.All)

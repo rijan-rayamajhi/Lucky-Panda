@@ -83,13 +83,27 @@ public class SlotUI : MonoBehaviour
         }
 #endif
 
-        // Slowly increment progressive jackpots
+        var c = CultureInfo.InvariantCulture;
+
+        // Hold & Win jackpots are fixed bet-multiples, so the tickers show their
+        // real value at the current bet rather than a growing progressive pool.
+        if (machine != null && machine.Def != null && machine.Def.payMode == PayMode.HoldAndWin)
+        {
+            var def = machine.Def;
+            long b = machine.CurrentBet;
+            if (grandText) grandText.text = ((long)def.grandBetMultiplier * b).ToString("N0", c);
+            if (majorText) majorText.text = ((long)def.majorBetMultiplier * b).ToString("N0", c);
+            if (minorText) minorText.text = ((long)def.minorBetMultiplier * b).ToString("N0", c);
+            if (miniText)  miniText.text  = ((long)def.miniBetMultiplier  * b).ToString("N0", c);
+            return;
+        }
+
+        // Slowly increment progressive jackpots (payline machines).
         grandPool += Time.deltaTime * 18.5;
         majorPool += Time.deltaTime * 8.2;
         minorPool += Time.deltaTime * 3.1;
         miniPool += Time.deltaTime * 1.2;
 
-        var c = CultureInfo.InvariantCulture;
         if (grandText) grandText.text = ((long)grandPool).ToString("N0", c);
         if (majorText) majorText.text = ((long)majorPool).ToString("N0", c);
         if (minorText) minorText.text = ((long)minorPool).ToString("N0", c);
@@ -301,6 +315,28 @@ public class SlotUI : MonoBehaviour
             chainMultiplierText.text = "x1";
             chainMultiplierText.color = new Color(0.7f, 0.7f, 0.7f, 0.9f);
         }
+    }
+
+    // Hold & Win reuses the free-spins banner GameObject as the respin/jackpot
+    // banner — the machine has no free-spins feature, so there is no conflict.
+    public void ShowHoldBanner(int respins)
+    {
+        if (freeSpinsBanner) freeSpinsBanner.SetActive(true);
+        SetHoldText($"HOLD & WIN  -  RESPINS: {respins}");
+    }
+
+    public void UpdateRespins(int respins) => SetHoldText($"HOLD & WIN  -  RESPINS: {respins}");
+
+    public void ShowJackpotAward(JackpotTier tier) => SetHoldText(tier.ToString().ToUpper() + " JACKPOT!");
+
+    public void HideHoldBanner()
+    {
+        if (freeSpinsBanner) freeSpinsBanner.SetActive(false);
+    }
+
+    void SetHoldText(string text)
+    {
+        if (freeSpinsCountText) freeSpinsCountText.text = text;
     }
 
     public void UpdateFreeSpins(int remaining)
